@@ -141,17 +141,16 @@ Classification = Literal[
 ]
 
 PyramidLayer = Literal[
-    "Data Source Query",
-    "Data Prep Step",
-    "Mapping Data Source",
-    "Published Data Source",
-    "Calculated Field (Measure)",
-    "Calculated Field (Dimension)",
-    "Filter",
-    "Parameter",
-    "Worksheet",
-    "Dashboard Action",
-    "Dashboard",
+    "Data Source / Model Table",
+    "Data Flow Step",
+    "Semantic Relationship",
+    "Calculated Column",
+    "Formulate Measure (PQL)",
+    "Discover Filter / Slicer",
+    "Parameter / Global List",
+    "Discover Visual (Grid/Chart)",
+    "Present Dashboard",
+    "Publish Publication",
     "Manual Review",
 ]
 
@@ -848,16 +847,58 @@ _LAYER_PRECEDENCE = [
     "Manual Review",
 ]
 
+PYRAMID_SYNONYMS = {
+    "data source query": "Data Source / Model Table",
+    "data source": "Data Source / Model Table",
+    "model table": "Data Source / Model Table",
+    "data prep step": "Data Flow Step",
+    "data flow step": "Data Flow Step",
+    "data flow": "Data Flow Step",
+    "data prep": "Data Flow Step",
+    "mapping data source": "Data Source / Model Table",
+    "published data source": "Data Source / Model Table",
+    "calculated field (measure)": "Formulate Measure (PQL)",
+    "calculated field (dimension)": "Calculated Column",
+    "calculated field": "Calculated Column",
+    "calculated column": "Calculated Column",
+    "measure": "Formulate Measure (PQL)",
+    "formulate measure": "Formulate Measure (PQL)",
+    "formulate measure (pql)": "Formulate Measure (PQL)",
+    "filter": "Discover Filter / Slicer",
+    "discover filter": "Discover Filter / Slicer",
+    "slicer": "Discover Filter / Slicer",
+    "parameter": "Parameter / Global List",
+    "parameter / global list": "Parameter / Global List",
+    "worksheet": "Discover Visual (Grid/Chart)",
+    "visual": "Discover Visual (Grid/Chart)",
+    "discover visual": "Discover Visual (Grid/Chart)",
+    "discover visual (grid/chart)": "Discover Visual (Grid/Chart)",
+    "dashboard action": "Discover Visual (Grid/Chart)",
+    "dashboard": "Present Dashboard",
+    "present dashboard": "Present Dashboard",
+    "publication": "Publish Publication",
+    "publish publication": "Publish Publication",
+    "burst report": "Publish Publication",
+    "manual review": "Manual Review",
+}
+
 def _coerce_pyramid_layer(value):
     if value in VALID_PYRAMID_LAYERS:
         return value
-    parts = re.split(r'[|/,]', str(value))
-    parts = [p.strip() for p in parts if p.strip() in VALID_PYRAMID_LAYERS]
-    if parts:
-        for preferred in _LAYER_PRECEDENCE:
-            if preferred in parts:
-                return preferred
-        return parts[0]
+    val_clean = str(value).strip()
+    val_lower = val_clean.lower()
+    if val_lower in PYRAMID_SYNONYMS:
+        return PYRAMID_SYNONYMS[val_lower]
+    parts = re.split(r'[|/,]', val_clean)
+    for p in parts:
+        plow = p.strip().lower()
+        if plow in PYRAMID_SYNONYMS:
+            return PYRAMID_SYNONYMS[plow]
+        if p.strip() in VALID_PYRAMID_LAYERS:
+            return p.strip()
+    for preferred in _LAYER_PRECEDENCE:
+        if preferred.lower() in val_lower:
+            return preferred
     return "Manual Review"
 
 def normalize_pyramid_layers(raw):
