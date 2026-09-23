@@ -6,7 +6,7 @@ from html import escape
 from pathlib import Path
 from collections import Counter, defaultdict
 from typing import Literal, Optional
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, ConfigDict, AliasChoices, field_validator
 
 import difflib
 import pandas as pd
@@ -154,18 +154,131 @@ PyramidLayer = Literal[
     "Manual Review",
 ]
 
+VALID_PYRAMID_LAYERS = {
+    "Data Source / Model Table",
+    "Data Flow Step",
+    "Semantic Relationship",
+    "Calculated Column",
+    "Formulate Measure (PQL)",
+    "Discover Filter / Slicer",
+    "Parameter / Global List",
+    "Discover Visual (Grid/Chart)",
+    "Present Dashboard",
+    "Publish Publication",
+    "Manual Review",
+}
+
+_LAYER_PRECEDENCE = [
+    "Data Flow Step",
+    "Data Source / Model Table",
+    "Semantic Relationship",
+    "Calculated Column",
+    "Formulate Measure (PQL)",
+    "Discover Filter / Slicer",
+    "Parameter / Global List",
+    "Discover Visual (Grid/Chart)",
+    "Present Dashboard",
+    "Publish Publication",
+    "Manual Review",
+]
+
+PYRAMID_SYNONYMS = {
+    "data source query": "Data Source / Model Table",
+    "data source": "Data Source / Model Table",
+    "data source / model table": "Data Source / Model Table",
+    "model table": "Data Source / Model Table",
+    "data prep step": "Data Flow Step",
+    "data flow step": "Data Flow Step",
+    "data flow": "Data Flow Step",
+    "data prep": "Data Flow Step",
+    "mapping data source": "Data Source / Model Table",
+    "published data source": "Data Source / Model Table",
+    "calculated field (measure)": "Formulate Measure (PQL)",
+    "calculated field (dimension)": "Calculated Column",
+    "calculated field": "Calculated Column",
+    "calculated column": "Calculated Column",
+    "measure": "Formulate Measure (PQL)",
+    "formulate measure": "Formulate Measure (PQL)",
+    "formulate measure (pql)": "Formulate Measure (PQL)",
+    "filter": "Discover Filter / Slicer",
+    "discover filter": "Discover Filter / Slicer",
+    "discover filter / slicer": "Discover Filter / Slicer",
+    "slicer": "Discover Filter / Slicer",
+    "parameter": "Parameter / Global List",
+    "parameter / global list": "Parameter / Global List",
+    "worksheet": "Discover Visual (Grid/Chart)",
+    "visual": "Discover Visual (Grid/Chart)",
+    "discover visual": "Discover Visual (Grid/Chart)",
+    "discover visual (grid/chart)": "Discover Visual (Grid/Chart)",
+    "dashboard action": "Discover Visual (Grid/Chart)",
+    "dashboard": "Present Dashboard",
+    "present dashboard": "Present Dashboard",
+    "publication": "Publish Publication",
+    "publish publication": "Publish Publication",
+    "burst report": "Publish Publication",
+    "manual review": "Manual Review",
+}
+
+def _coerce_pyramid_layer(value):
+    if not value:
+        return "Manual Review"
+    if value in VALID_PYRAMID_LAYERS:
+        return value
+    val_clean = str(value).strip()
+    val_lower = val_clean.lower()
+    if val_lower in PYRAMID_SYNONYMS:
+        return PYRAMID_SYNONYMS[val_lower]
+    parts = re.split(r'[|/,]', val_clean)
+    for p in parts:
+        plow = p.strip().lower()
+        if plow in PYRAMID_SYNONYMS:
+            return PYRAMID_SYNONYMS[plow]
+        if p.strip() in VALID_PYRAMID_LAYERS:
+            return p.strip()
+    for preferred in _LAYER_PRECEDENCE:
+        if preferred.lower() in val_lower:
+            return preferred
+    return "Manual Review"
+
 
 class PlanStep(BaseModel):
-    step_number: int = Field(ge=1)
-    title: str
-    action: str
-    pyramid_layer: PyramidLayer
-    classification: Classification
-    reason: str
+    model_config = ConfigDict(populate_by_name=True)
+
+    step_number: int = Field(default=1, ge=1)
+    title: str = Field(default="Step")
+    action: str = Field(default="")
+    pyramid_layer: PyramidLayer = Field(
+        default="Manual Review",
+        validation_alias=AliasChoices('pyramid_layer', 'tableau_layer', 'pbi_layer', 'cognos_layer', 'layer', 'target_layer')
+    )
+    classification: Classification = Field(default="manual_review")
+    reason: str = Field(default="")
     referenced_sources: list[str] = Field(default_factory=list)
     referenced_fields: list[str] = Field(default_factory=list)
-    confidence: int = Field(ge=0, le=100)
+    confidence: int = Field(default=75, ge=0, le=100)
     manual_validation: Optional[str] = None
+
+    @field_validator('pyramid_layer', mode='before')
+    @classmethod
+    def coerce_layer(cls, v):
+        return _coerce_pyramid_layer(v)
+
+    @field_validator('classification', mode='before')
+    @classmethod
+    def coerce_classification(cls, v):
+        valid = {"confirmed", "rule_based", "inferred", "suggested", "manual_review"}
+        v_str = str(v or '').strip().lower().replace(' ', '_').replace('-', '_')
+        if v_str in valid:
+            return v_str
+        return "manual_review"
+
+    @property
+    def tableau_layer(self) -> str:
+        return self.pyramid_layer
+
+    @property
+    def layer(self) -> str:
+        return self.pyramid_layer
 
 
 class ReportSummary(BaseModel):
@@ -195,20 +308,25 @@ def validate_plan_references(plan: BuildPlan, allowed_sources: set, allowed_fiel
     can be stripped/downgraded rather than silently trusted."""
     errors: list[str] = []
     sections = [
-        plan.implementation_plan,
-        plan.data_preparation,
-        plan.calculation_plan,
-        plan.filter_parameter_plan,
-        plan.page_recommendations,
+        getattr(plan, 'implementation_plan', []),
+        getattr(plan, 'data_preparation', []),
+        getattr(plan, 'calculation_plan', []),
+        getattr(plan, 'filter_parameter_plan', []),
+        getattr(plan, 'page_recommendations', []),
     ]
     for section in sections:
+        if not section:
+            continue
         for step in section:
-            unknown_sources = set(step.referenced_sources) - allowed_sources
-            unknown_fields = set(step.referenced_fields) - allowed_fields
+            sources = getattr(step, 'referenced_sources', []) or []
+            fields = getattr(step, 'referenced_fields', []) or []
+            unknown_sources = set(sources) - allowed_sources
+            unknown_fields = set(fields) - allowed_fields
+            step_num = getattr(step, 'step_number', 1)
             if unknown_sources:
-                errors.append(f"Step {step.step_number} references unknown sources: {sorted(unknown_sources)}")
+                errors.append(f"Step {step_num} references unknown sources: {sorted(unknown_sources)}")
             if unknown_fields:
-                errors.append(f"Step {step.step_number} references unknown fields: {sorted(unknown_fields)}")
+                errors.append(f"Step {step_num} references unknown fields: {sorted(unknown_fields)}")
     return errors
 
 
@@ -218,9 +336,13 @@ def strip_unverified_steps(plan: BuildPlan, allowed_sources: set, allowed_fields
     outright (keeps the plan complete while flagging what needs a human)."""
     def clean_section(section: list[PlanStep]) -> list[PlanStep]:
         cleaned = []
+        if not section:
+            return cleaned
         for step in section:
-            unknown_sources = set(step.referenced_sources) - allowed_sources
-            unknown_fields = set(step.referenced_fields) - allowed_fields
+            sources = getattr(step, 'referenced_sources', []) or []
+            fields = getattr(step, 'referenced_fields', []) or []
+            unknown_sources = set(sources) - allowed_sources
+            unknown_fields = set(fields) - allowed_fields
             if unknown_sources or unknown_fields:
                 step.classification = "manual_review"
                 note = "AI recommendation flagged: referenced "
@@ -230,15 +352,15 @@ def strip_unverified_steps(plan: BuildPlan, allowed_sources: set, allowed_fields
                 if unknown_fields:
                     parts.append(f"unknown field(s) {sorted(unknown_fields)}")
                 step.manual_validation = note + " and ".join(parts) + " not present in the parsed report."
-                step.confidence = min(step.confidence, 40)
+                step.confidence = min(getattr(step, 'confidence', 50), 40)
             cleaned.append(step)
         return cleaned
 
-    plan.implementation_plan = clean_section(plan.implementation_plan)
-    plan.data_preparation = clean_section(plan.data_preparation)
-    plan.calculation_plan = clean_section(plan.calculation_plan)
-    plan.filter_parameter_plan = clean_section(plan.filter_parameter_plan)
-    plan.page_recommendations = clean_section(plan.page_recommendations)
+    plan.implementation_plan = clean_section(getattr(plan, 'implementation_plan', []))
+    plan.data_preparation = clean_section(getattr(plan, 'data_preparation', []))
+    plan.calculation_plan = clean_section(getattr(plan, 'calculation_plan', []))
+    plan.filter_parameter_plan = clean_section(getattr(plan, 'filter_parameter_plan', []))
+    plan.page_recommendations = clean_section(getattr(plan, 'page_recommendations', []))
     return plan
 
 #  Rule-based one
@@ -819,88 +941,6 @@ Every entry in high_risk_joins must appear in filter_parameter_plan or implement
 "manual_review" and a reason explaining the specific risk (MATCH FILE OLD/NEW/AFTER/MORE behavior, or JOIN TO ALL
 cardinality). Every entry in unresolved_formulas must get exactly one calculation_plan step.
 """
-VALID_PYRAMID_LAYERS = {
-    "Data Source / Model Table",
-    "Data Flow Step",
-    "Semantic Relationship",
-    "Calculated Column",
-    "Formulate Measure (PQL)",
-    "Discover Filter / Slicer",
-    "Parameter / Global List",
-    "Discover Visual (Grid/Chart)",
-    "Present Dashboard",
-    "Publish Publication",
-    "Manual Review",
-}
-
-_LAYER_PRECEDENCE = [
-    "Data Flow Step",
-    "Data Source / Model Table",
-    "Semantic Relationship",
-    "Calculated Column",
-    "Formulate Measure (PQL)",
-    "Discover Filter / Slicer",
-    "Parameter / Global List",
-    "Discover Visual (Grid/Chart)",
-    "Present Dashboard",
-    "Publish Publication",
-    "Manual Review",
-]
-
-PYRAMID_SYNONYMS = {
-    "data source query": "Data Source / Model Table",
-    "data source": "Data Source / Model Table",
-    "model table": "Data Source / Model Table",
-    "data prep step": "Data Flow Step",
-    "data flow step": "Data Flow Step",
-    "data flow": "Data Flow Step",
-    "data prep": "Data Flow Step",
-    "mapping data source": "Data Source / Model Table",
-    "published data source": "Data Source / Model Table",
-    "calculated field (measure)": "Formulate Measure (PQL)",
-    "calculated field (dimension)": "Calculated Column",
-    "calculated field": "Calculated Column",
-    "calculated column": "Calculated Column",
-    "measure": "Formulate Measure (PQL)",
-    "formulate measure": "Formulate Measure (PQL)",
-    "formulate measure (pql)": "Formulate Measure (PQL)",
-    "filter": "Discover Filter / Slicer",
-    "discover filter": "Discover Filter / Slicer",
-    "slicer": "Discover Filter / Slicer",
-    "parameter": "Parameter / Global List",
-    "parameter / global list": "Parameter / Global List",
-    "worksheet": "Discover Visual (Grid/Chart)",
-    "visual": "Discover Visual (Grid/Chart)",
-    "discover visual": "Discover Visual (Grid/Chart)",
-    "discover visual (grid/chart)": "Discover Visual (Grid/Chart)",
-    "dashboard action": "Discover Visual (Grid/Chart)",
-    "dashboard": "Present Dashboard",
-    "present dashboard": "Present Dashboard",
-    "publication": "Publish Publication",
-    "publish publication": "Publish Publication",
-    "burst report": "Publish Publication",
-    "manual review": "Manual Review",
-}
-
-def _coerce_pyramid_layer(value):
-    if value in VALID_PYRAMID_LAYERS:
-        return value
-    val_clean = str(value).strip()
-    val_lower = val_clean.lower()
-    if val_lower in PYRAMID_SYNONYMS:
-        return PYRAMID_SYNONYMS[val_lower]
-    parts = re.split(r'[|/,]', val_clean)
-    for p in parts:
-        plow = p.strip().lower()
-        if plow in PYRAMID_SYNONYMS:
-            return PYRAMID_SYNONYMS[plow]
-        if p.strip() in VALID_PYRAMID_LAYERS:
-            return p.strip()
-    for preferred in _LAYER_PRECEDENCE:
-        if preferred.lower() in val_lower:
-            return preferred
-    return "Manual Review"
-
 def normalize_pyramid_layers(raw):
     section_keys = [
         'implementation_plan', 'data_preparation', 'calculation_plan',
@@ -911,8 +951,17 @@ def normalize_pyramid_layers(raw):
         if not isinstance(steps, list):
             continue
         for step in steps:
-            if isinstance(step, dict) and 'pyramid_layer' in step:
-                step['pyramid_layer'] = _coerce_pyramid_layer(step['pyramid_layer'])
+            if isinstance(step, dict):
+                raw_layer = (
+                    step.get('pyramid_layer')
+                    or step.get('tableau_layer')
+                    or step.get('pbi_layer')
+                    or step.get('cognos_layer')
+                    or step.get('layer')
+                    or step.get('target_layer')
+                    or 'Manual Review'
+                )
+                step['pyramid_layer'] = _coerce_pyramid_layer(raw_layer)
     return raw
 
 
@@ -1052,21 +1101,33 @@ def sort_overview_df(df, sort_by):
 
 def _render_plan_step(step, source_df):
     level_map = {'confirmed': 'ok', 'rule_based': 'ok', 'inferred': 'medium', 'suggested': 'medium', 'manual_review': 'high'}
-    level = level_map.get(step.classification, 'medium')
+    classification = getattr(step, 'classification', 'manual_review')
+    level = level_map.get(classification, 'medium')
+    raw_layer = getattr(step, 'pyramid_layer', getattr(step, 'tableau_layer', getattr(step, 'layer', 'Manual Review')))
+    layer = _coerce_pyramid_layer(raw_layer)
+    confidence = getattr(step, 'confidence', 75)
+    title = getattr(step, 'title', 'Step')
+    action = getattr(step, 'action', '')
+    reason = getattr(step, 'reason', '')
+    sources = getattr(step, 'referenced_sources', []) or []
+    fields = getattr(step, 'referenced_fields', []) or []
+    manual_validation = getattr(step, 'manual_validation', None)
+
     with st.container(border=True):
-        st.markdown(f"**{step.title}** — {step.pyramid_layer}")
+        st.markdown(f"**{title}** — {layer}")
         st.markdown(
-            f"{badge(step.classification.replace('_', ' ').title(), level)} "
-            f"{badge(f'Confidence: {step.confidence}%')}",
+            f"{badge(str(classification).replace('_', ' ').title(), level)} "
+            f"{badge(f'Confidence: {confidence}%')}",
             unsafe_allow_html=True,
         )
-        st.write(step.action)
-        st.caption(f"Why: {step.reason}")
-        if step.referenced_sources or step.referenced_fields:
-            refs = ', '.join(step.referenced_sources + step.referenced_fields)
+        st.write(action)
+        if reason:
+            st.caption(f"Why: {reason}")
+        if sources or fields:
+            refs = ', '.join(sources + fields)
             st.caption(f"References: {refs}")
-        if step.manual_validation:
-            st.warning(step.manual_validation)
+        if manual_validation:
+            st.warning(manual_validation)
 
 
 def build_pyramid_prep_build_order(lineage_df, plan):
@@ -1091,14 +1152,29 @@ def build_pyramid_prep_build_order(lineage_df, plan):
             })
 
     if plan is not None:
+        target_layers = {
+            "Data Flow Step", "Data Source / Model Table", "Semantic Relationship",
+            "Data Prep Step", "Mapping Data Source", "Data Source Query"
+        }
+        all_steps = (
+            getattr(plan, 'data_preparation', []) or []
+        ) + (
+            getattr(plan, 'calculation_plan', []) or []
+        ) + (
+            getattr(plan, 'filter_parameter_plan', []) or []
+        )
         prep_steps = [
-            step for step in (plan.data_preparation + plan.calculation_plan + plan.filter_parameter_plan)
-            if step.pyramid_layer in {"Data Prep Step", "Mapping Data Source", "Data Source Query"}
+            step for step in all_steps
+            if _coerce_pyramid_layer(getattr(step, 'pyramid_layer', getattr(step, 'tableau_layer', getattr(step, 'layer', '')))) in target_layers
         ]
         for step in prep_steps:
             matched = False
+            sources = getattr(step, 'referenced_sources', []) or []
+            fields = getattr(step, 'referenced_fields', []) or []
+            step_title = getattr(step, 'title', 'Step')
+            step_action = getattr(step, 'action', '')
             for stage in ordered_stages:
-                refs = set(step.referenced_sources) | set(step.referenced_fields)
+                refs = set(sources) | set(fields)
                 if stage['output_table'] in refs or any(r in stage['what_happens'] for r in refs):
                     stage['matched_steps'].append(step)
                     matched = True
@@ -1108,8 +1184,8 @@ def build_pyramid_prep_build_order(lineage_df, plan):
             elif not matched:
                 ordered_stages.append({
                     'stage_number': len(ordered_stages) + 1,
-                    'output_table': step.title,
-                    'what_happens': step.action,
+                    'output_table': step_title,
+                    'what_happens': step_action,
                     'keys': '',
                     'matched_steps': [step],
                 })
@@ -1137,9 +1213,10 @@ def render_pyramid_prep_build_order(lineage_df, plan):
             if not stage['matched_steps']:
                 st.caption("No specific transformation steps returned for this stage - review manually.")
             for step in stage['matched_steps']:
-                st.markdown(f"- **{step.title}**: {step.action}")
-                if step.manual_validation:
-                    st.warning(step.manual_validation)
+                st.markdown(f"- **{getattr(step, 'title', 'Step')}**: {getattr(step, 'action', '')}")
+                manual_val = getattr(step, 'manual_validation', None)
+                if manual_val:
+                    st.warning(manual_val)
 
 
 def render_ai_build_plan(report_row, source_df, lineage_df, join_df, filter_df, formula_df, mapping_df, final_df, field_df):
@@ -1170,18 +1247,29 @@ def render_ai_build_plan(report_row, source_df, lineage_df, join_df, filter_df, 
 
     client = get_openai_client()
     if client is None:
-        st.warning(
-            "OpenAI is not configured. Add `OPENAI_API_KEY` to `.streamlit/secrets.toml` "
-            "(e.g. `OPENAI_API_KEY = \"sk-...\"`) to enable the AI-assisted portion."
-        )
+        with st.expander("🔑 OpenAI API Key Required", expanded=True):
+            st.warning(
+                "OpenAI is not configured. Add `OPENAI_API_KEY` to `.streamlit/secrets.toml` "
+                "or enter your API key below for this session:"
+            )
+            key_input = st.text_input(
+                "OpenAI API Key",
+                type="password",
+                key="pyramid_openai_key_input",
+                placeholder="sk-proj-...",
+            )
+            if key_input:
+                st.session_state['openai_api_key'] = key_input.strip()
+                st.success("API key saved for this session!")
+                st.rerun()
         return
 
     report_key = re.sub(r'[^A-Za-z0-9_]+', '_', str(report_row.get('FEX Name', '')) + '_' + str(report_row.get('File Path', '')))
-    cache = st.session_state.setdefault('ai_build_plan_cache', {})
+    cache = st.session_state.setdefault('pyramid_ai_build_plan_cache', {})
 
     generate_clicked = st.button(
         "Generate AI build plan" if report_key not in cache else "Regenerate AI build plan",
-        key=f"ai_build_plan_btn_{report_key}",
+        key=f"pyramid_ai_build_plan_btn_{report_key}",
     )
 
     if generate_clicked:
@@ -1202,63 +1290,77 @@ def render_ai_build_plan(report_row, source_df, lineage_df, join_df, filter_df, 
         st.error(error)
         return
 
-    summary = plan.report_summary
+    if plan is None:
+        st.info("Click the button above to generate the AI-assisted portion of the build plan.")
+        return
+
+    summary = getattr(plan, 'report_summary', None)
     st.markdown("#### AI-Assisted Plan")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Complexity", summary.complexity_level)
-    c2.metric("Overall confidence", f"{summary.overall_confidence}%")
-    c3.metric("Manual review items", len(plan.manual_review_items))
-    st.write(f"**Likely purpose:** {summary.likely_purpose}")
-    st.write(f"**Report type:** {summary.report_type}")
+    if summary:
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Complexity", getattr(summary, 'complexity_level', 'Medium'))
+        c2.metric("Overall confidence", f"{getattr(summary, 'overall_confidence', 0)}%")
+        manual_items = getattr(plan, 'manual_review_items', []) or []
+        c3.metric("Manual review items", len(manual_items))
+        st.write(f"**Likely purpose:** {getattr(summary, 'likely_purpose', '')}")
+        st.write(f"**Report type:** {getattr(summary, 'report_type', '')}")
 
     tabs = st.tabs(["Build Order", "Implementation Steps", "Data Prep", "Calculations", "Filters/Joins", "Pages", "Validation", "Manual Review"])
     with tabs[0]:
         render_pyramid_prep_build_order(lineage_df, plan)
 
     with tabs[1]:
-        if not plan.implementation_plan:
+        imp_steps = getattr(plan, 'implementation_plan', []) or []
+        if not imp_steps:
             st.info("No implementation steps returned.")
-        for step in sorted(plan.implementation_plan, key=lambda s: s.step_number):
+        for step in sorted(imp_steps, key=lambda s: getattr(s, 'step_number', 1)):
             _render_plan_step(step, source_df)
 
     with tabs[2]:
-        if not plan.data_preparation:
+        data_steps = getattr(plan, 'data_preparation', []) or []
+        if not data_steps:
             st.info("No data preparation steps returned.")
-        for step in plan.data_preparation:
+        for step in data_steps:
             _render_plan_step(step, source_df)
 
     with tabs[3]:
-        if not plan.calculation_plan:
+        calc_steps = getattr(plan, 'calculation_plan', []) or []
+        if not calc_steps:
             st.info("No calculation translations returned.")
-        for step in plan.calculation_plan:
+        for step in calc_steps:
             _render_plan_step(step, source_df)
 
     with tabs[4]:
-        if not plan.filter_parameter_plan:
+        filt_steps = getattr(plan, 'filter_parameter_plan', []) or []
+        if not filt_steps:
             st.info("No filter/join items returned.")
-        for step in plan.filter_parameter_plan:
+        for step in filt_steps:
             _render_plan_step(step, source_df)
 
     with tabs[5]:
-        if not plan.page_recommendations:
+        page_steps = getattr(plan, 'page_recommendations', []) or []
+        if not page_steps:
             st.info("No page/visual recommendations returned.")
-        for step in plan.page_recommendations:
+        for step in page_steps:
             _render_plan_step(step, source_df)
 
     with tabs[6]:
-        if not plan.validation_checks:
+        validation_checks = getattr(plan, 'validation_checks', []) or []
+        if not validation_checks:
             st.info("No validation checks returned.")
-        for idx, check in enumerate(plan.validation_checks, start=1):
+        for idx, check in enumerate(validation_checks, start=1):
             st.write(f"{idx}. {check}")
 
     with tabs[7]:
-        if not plan.manual_review_items:
+        manual_review_items = getattr(plan, 'manual_review_items', []) or []
+        if not manual_review_items:
             st.success("No manual review items flagged.")
-        for idx, item in enumerate(plan.manual_review_items, start=1):
+        for idx, item in enumerate(manual_review_items, start=1):
             st.warning(f"{idx}. {item}")
-        if plan.limitations:
+        limitations = getattr(plan, 'limitations', []) or []
+        if limitations:
             st.caption("Limitations:")
-            for lim in plan.limitations:
+            for lim in limitations:
                 st.caption(f"• {lim}")
 
 
