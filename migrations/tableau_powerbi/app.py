@@ -287,19 +287,10 @@ _COMPLEXITY_ALIASES = {'High': 'Very Complex', 'Low': 'Small'}
 def get_openai_client():
     if OpenAI is None:
         return None
-
-    api_key = (
-        st.secrets.get('OPENAI_API_KEY', '')
-        or os.environ.get('OPENAI_API_KEY', '')
-        or st.session_state.get('openai_api_key', '')
-    )
+    api_key = st.secrets.get('OPENAI_API_KEY', '')
     if not api_key or api_key == 'paste_your_openai_api_key_here':
         return None
-
-    try:
-        return OpenAI(api_key=api_key)
-    except Exception:
-        return None
+    return OpenAI(api_key=api_key)
 
 
 def parse_llm_json(text):
@@ -415,32 +406,20 @@ def generate_ai_build_plan(client, model, payload):
 
     while True:
         try:
-            if hasattr(client, 'chat') and hasattr(client.chat, 'completions'):
-                res = client.chat.completions.create(
-                    model=model,
-                    messages=[
-                        {"role": "system", "content": AI_BUILD_PLAN_SYSTEM_PROMPT},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    temperature=0.1,
-                    max_tokens=output_budget,
-                )
-                last_raw_text = res.choices[0].message.content or ''
-                was_truncated = getattr(res.choices[0], 'finish_reason', None) == 'length'
-            else:
-                response = client.responses.create(
-                    model=model,
-                    input=[
-                        {"role": "system", "content": AI_BUILD_PLAN_SYSTEM_PROMPT},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    temperature=0.1,
-                    max_output_tokens=output_budget,
-                )
-                last_raw_text = getattr(response, 'output_text', '') or ''
-                was_truncated = getattr(response, 'status', None) == 'incomplete'
+            response = client.responses.create(
+                model=model,
+                input=[
+                    {"role": "system", "content": AI_BUILD_PLAN_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.1,
+                max_output_tokens=output_budget,
+            )
         except Exception as e:
             return None, f'LLM error: {e}'
+
+        last_raw_text = response.output_text or ''
+        was_truncated = getattr(response, 'status', None) == 'incomplete'
         raw = parse_llm_json(last_raw_text)
 
         if not raw and was_truncated and output_budget < max_budget_cap:
@@ -2080,7 +2059,7 @@ def render_ai_build_plan(workbook_row, parsed):
     if generate_clicked:
         payload = build_ai_build_plan_payload(workbook_row, parsed)
         with st.spinner("Calling OpenAI (one request for this workbook)..."):
-            plan, error = generate_ai_build_plan(client, "gpt-4o-mini", payload)
+            plan, error = generate_ai_build_plan(client, "gpt-4.1-mini", payload)
         cache[workbook_key] = (plan, error)
 
     cached = cache.get(workbook_key)
@@ -2271,10 +2250,7 @@ def render_manual_review(parsed):
 # STREAMLIT PAGE LAYOUT
 # ===========================================================================
 
-try:
-    st.set_page_config(page_title="KashMap Migration Workspace", layout="wide")
-except Exception:
-    pass
+st.set_page_config(page_title="KashMap Migration Workspace", layout="wide")
 
 st.markdown(
     """
@@ -2715,7 +2691,7 @@ with st.expander("Translate one Tableau expression or query", expanded=False):
             st.warning("Paste a Tableau expression or formula first.")
         else:
             with st.spinner("Translating with LLM..."):
-                result = translate_expression_with_llm(client, "gpt-4o-mini", manual_type, manual_expression, manual_context)
+                result = translate_expression_with_llm(client, "gpt-4.1-mini", manual_type, manual_expression, manual_context)
             st.subheader("Power BI Translation")
             st.write("**Suggested Power BI Type**")
             st.write(result.get("suggested_power_bi_type", "") or "Not returned")

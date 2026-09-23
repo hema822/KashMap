@@ -1165,7 +1165,7 @@ def render_cognos_ai_build_plan(report_name, parsed, validation_issues):
     if clicked:
         payload = build_cognos_ai_payload(report_name, parsed, validation_issues)
         with st.spinner("Calling OpenAI..."):
-            plan, error = generate_cognos_ai_build_plan(client, "gpt-4o-mini", payload)
+            plan, error = generate_cognos_ai_build_plan(client, "gpt-4.1-mini", payload)
         cache[report_key] = (plan, error)
 
     cached = cache.get(report_key)

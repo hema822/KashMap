@@ -469,18 +469,11 @@ def get_openai_client():
     if OpenAI is None:
         return None
 
-    api_key = (
-        st.secrets.get('OPENAI_API_KEY', '')
-        or os.environ.get('OPENAI_API_KEY', '')
-        or st.session_state.get('openai_api_key', '')
-    )
+    api_key = st.secrets.get('OPENAI_API_KEY', '')
     if not api_key or api_key == 'paste_your_openai_api_key_here':
         return None
 
-    try:
-        return OpenAI(api_key=api_key)
-    except Exception:
-        return None
+    return OpenAI(api_key=api_key)
 
 
 def parse_llm_json(text):
@@ -591,7 +584,7 @@ def apply_llm_translations(parsed_results, llm_options):
         st.warning("LLM translation is enabled, but OpenAI is not configured. Check .streamlit/secrets.toml and requirements.txt.")
         return
 
-    model = llm_options.get('model') or 'gpt-4o-mini'
+    model = llm_options.get('model') or 'gpt-4.1-mini'
     max_rows = int(llm_options.get('max_rows') or 200)
     translated_count = 0
 
@@ -884,32 +877,20 @@ def generate_ai_build_plan(client, model, payload):
 
     while True:
         try:
-            if hasattr(client, 'chat') and hasattr(client.chat, 'completions'):
-                res = client.chat.completions.create(
-                    model=model,
-                    messages=[
-                        {"role": "system", "content": AI_BUILD_PLAN_SYSTEM_PROMPT},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    temperature=0.1,
-                    max_tokens=output_budget,
-                )
-                last_raw_text = res.choices[0].message.content or ''
-                was_truncated = getattr(res.choices[0], 'finish_reason', None) == 'length'
-            else:
-                response = client.responses.create(
-                    model=model,
-                    input=[
-                        {"role": "system", "content": AI_BUILD_PLAN_SYSTEM_PROMPT},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    temperature=0.1,
-                    max_output_tokens=output_budget,
-                )
-                last_raw_text = getattr(response, 'output_text', '') or ''
-                was_truncated = getattr(response, 'status', None) == 'incomplete'
+            response = client.responses.create(
+                model=model,
+                input=[
+                    {"role": "system", "content": AI_BUILD_PLAN_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.1,
+                max_output_tokens=output_budget,
+            )
         except Exception as e:
             return None, f'LLM error: {e}'
+
+        last_raw_text = response.output_text or ''
+        was_truncated = getattr(response, 'status', None) == 'incomplete'
 
         raw = parse_llm_json(last_raw_text)
 
@@ -1135,7 +1116,7 @@ def render_ai_build_plan(report_row, source_df, lineage_df, join_df, filter_df, 
             report_row, source_df, lineage_df, join_df, filter_df, formula_df, mapping_df, final_df, field_df
         )
         with st.spinner("Calling OpenAI (one request for this report)..."):
-            plan, error = generate_ai_build_plan(client, "gpt-4o-mini", payload)
+            plan, error = generate_ai_build_plan(client, "gpt-4.1-mini", payload)
         cache[report_key] = (plan, error)
 
     cached = cache.get(report_key)
@@ -3734,10 +3715,7 @@ def build_output_workbook(fex_items, allowed_program_names, matched_pairs, llm_o
     )
 
 
-try:
-    st.set_page_config(page_title="KashMap Migration Workspace", layout="wide")
-except Exception:
-    pass
+st.set_page_config(page_title="KashMap Migration Workspace", layout="wide")
 
 st.markdown(
     """
@@ -4408,7 +4386,7 @@ with side_col:
     llm_translate_formulas = False
     llm_translate_filters = False
     llm_max_rows = 200
-    llm_model = "gpt-4o-mini"
+    llm_model = "gpt-4.1-mini"
 llm_options = {
     "enabled": use_llm_translation,
     "formulas": llm_translate_formulas,
