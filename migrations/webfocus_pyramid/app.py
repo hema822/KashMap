@@ -329,7 +329,18 @@ def validate_plan_references(plan: BuildPlan, allowed_sources: set, allowed_fiel
                 errors.append(f"Step {step_num} references unknown fields: {sorted(unknown_fields)}")
     return errors
 
-
+def create_migration_logic():
+    return {
+        "sources": [],
+        "joins": [],
+        "filters": [],
+        "calculations": [],
+        "mappings": [],
+        "aggregations": [],
+        "groupings": [],
+        "parameters": [],
+        "outputs": []
+    }
 def strip_unverified_steps(plan: BuildPlan, allowed_sources: set, allowed_fields: set) -> BuildPlan:
     """Downgrades any step referencing unknown sources/fields to manual_review
     classification and appends an explanatory note, instead of deleting it
@@ -2188,8 +2199,21 @@ def extract_hold_lineage(text, parsed):
 
 def decode_pairs_from_formula(formula):
     text_value = normalize_expression(formula)
+    # 1. Standard WebFOCUS: DECODE(field, 'val1', 'map1', ...)
+    match = re.search(r'\bDECODE\s*\(\s*([A-Za-z_][\w.]*)\s*,\s*(.*?)\)', text_value, re.IGNORECASE)
+    if match:
+        source_field = match.group(1)
+        tokens = re.findall(r"'[^']*'|\"[^\"]*\"|[^,\s()]+", match.group(2).strip())
+        cleaned = [t.strip().strip("'\"").rstrip(',') for t in tokens if t.strip() and t.strip() != ',']
+        pairs = []
+        for idx in range(0, len(cleaned) - 1, 2):
+            pairs.append((cleaned[idx], cleaned[idx + 1]))
+        return source_field, pairs
+
+    # 2. Syntax: DECODE field ( 'val1' 'map1' ... )
     match = re.search(r'\bDECODE\s+([A-Za-z_][\w.]*)\s*\((.*?)\)', text_value, re.IGNORECASE)
     if not match:
+        # 3. Syntax: DECODE field 'val1' 'map1' ...
         match = re.search(r'\bDECODE\s+([A-Za-z_][\w.]*)\s+(.*)', text_value, re.IGNORECASE)
     if not match:
         return '', []
@@ -2404,6 +2428,625 @@ def build_pyramid_plan(parsed):
     return rows
 
 
+def create_migration_logic(parsed=None):
+    if parsed is not None:
+        return build_generic_migration_representation(parsed)
+    return {
+        "sources": [],
+        "joins": [],
+        "filters": [],
+        "calculations": [],
+        "mappings": [],
+        "aggregations": [],
+        "groupings": [],
+        "parameters": [],
+        "outputs": [],
+        "semantic_model": {
+            "tables": [],
+            "columns": [],
+            "measures": [],
+            "relationships": [],
+            "hierarchies": [],
+        },
+    }
+
+
+def parse_filter_expression(expr):
+    clean = ' '.join(str(expr).split())
+    m = re.match(
+        r'^(?:WHERE|IF\s+)?([A-Za-z_][\w.]*)\s+((?:NOT\s+)?(?:EQ|NE|GT|LT|GE|LE|LIKE|IN|CONTAINS|IS(?:\s+NOT)?))\s+(.+)$',
+        clean,
+        re.IGNORECASE
+    )
+    if m:
+        field = m.group(1).strip()
+        op = m.group(2).strip().upper()
+        val = m.group(3).strip()
+        return field, op, val
+    parts = clean.split(maxsplit=2)
+    if len(parts) == 3:
+        return parts[0], parts[1].upper(), parts[2]
+    return clean, "CUSTOM", ""
+
+
+def decide_pyramid_join_strategy(join_item, hold_names=None):
+    """Evaluates whether a WebFOCUS JOIN or MATCH FILE operation should map to:
+    1. Pyramid Semantic Model Relationship
+    2. Pyramid Data Flow Join
+    3. Manual Review
+    Returns recommended target, alternative target, action, review level, confidence, and detailed rationale.
+    """
+    m_type = str(join_item.get('mapping_type', 'JOIN')).upper()
+    left_t = str(join_item.get('from_table') or join_item.get('left_table') or '').strip()
+    right_t = str(join_item.get('to_table') or join_item.get('right_table') or '').strip()
+    left_c = str(join_item.get('from_key') or join_item.get('left_column') or '').strip()
+    right_c = str(join_item.get('to_key') or join_item.get('right_column') or '').strip()
+    j_mode = str(join_item.get('join_type', 'JOIN')).upper()
+
+    left_is_hold = is_hold_like_table(left_t, hold_names)
+    right_is_hold = is_hold_like_table(right_t, hold_names)
+    involves_hold = left_is_hold or right_is_hold
+
+    if m_type == 'MATCH FILE':
+        recommended = "Pyramid Data Flow Step (Merge / Append)"
+        alternative = "Database SQL View (Full Outer Join / COALESCE)"
+        review_level = "manual_review"
+        confidence = 55
+        action = f"Build multi-source merge in Pyramid Data Flow joining {left_t} and {right_t} on ({left_c})"
+        reason = "WebFOCUS MATCH FILE uses procedural set merge logic (OLD-OR-NEW / AFTER / MORE) requiring transformation sequencing in Data Flow."
+    elif involves_hold:
+        recommended = "Pyramid Data Flow Physical Join"
+        alternative = "Pyramid Semantic Model Relationship"
+        review_level = "recommended"
+        confidence = 85
+        hold_name = left_t if left_is_hold else right_t
+        action = f"Create Data Flow Join between {left_t}[{left_c}] and {right_t}[{right_c}] to merge staging dataset '{hold_name}'"
+        reason = f"Join involves intermediate staging table '{hold_name}' created in upstream pipeline; physical join in Data Flow ensures transformation sequencing."
+    elif 'TO ALL' in j_mode:
+        recommended = "Pyramid Data Model Relationship (1:Many)"
+        alternative = "Pyramid Data Flow Physical Join (with deduplication)"
+        review_level = "manual_review"
+        confidence = 65
+        action = f"Create 1:Many relationship {left_t}.{left_c} -> {right_t}.{right_c} in Pyramid Data Model after verifying uniqueness"
+        reason = "WebFOCUS 'JOIN TO ALL' allows multiple matching target rows; potential cartesian expansion risk requires cardinality validation."
+    else:
+        recommended = "Pyramid Semantic Model Relationship"
+        alternative = "Pyramid Data Flow Physical Join"
+        review_level = "recommended"
+        confidence = 90
+        action = f"Create Semantic Model relationship: {left_t}.{left_c} -> {right_t}.{right_c} in Pyramid Data Model"
+        reason = f"Standard relational key link between warehouse tables ({left_t} -> {right_t}); semantic modeling enables dynamic SQL push-down."
+
+    return {
+        "source_table": left_t,
+        "target_table": right_t,
+        "join_columns": f"{left_c} = {right_c}" if left_c and right_c else left_c,
+        "join_condition": f"{left_t}.{left_c} = {right_t}.{right_c}" if left_c and right_c else "Custom join condition",
+        "recommended_implementation": recommended,
+        "alternative_implementation": alternative,
+        "action": action,
+        "reason": reason,
+        "confidence": confidence,
+        "review_level": review_level,
+    }
+
+
+def build_generic_migration_representation(parsed):
+    logic = create_migration_logic()
+
+    # 1. Sources
+    all_sources = list(dict.fromkeys(parsed.get('real_sources', []) + parsed.get('sources', [])))
+    for j in parsed.get('join_match_mapping', []):
+        for side in ('from_table', 'to_table'):
+            tbl = j.get(side, '').strip()
+            if tbl and tbl not in all_sources:
+                all_sources.append(tbl)
+
+    for s in all_sources:
+        is_hold = is_hold_like_table(s, parsed.get('hold_names'))
+        raw_ref = parsed.get('file_definitions', {}).get(str(s).upper(), '')
+        logic['sources'].append({
+            "name": s,
+            "type": "HOLD" if is_hold else ("Flat file" if raw_ref else "Table/Synonym"),
+            "is_hold": is_hold,
+            "raw_reference": raw_ref,
+        })
+
+    # 2. Joins & Matches
+    for j in parsed.get('join_match_mapping', []):
+        strat = decide_pyramid_join_strategy(j, parsed.get('hold_names'))
+        logic['joins'].append({
+            "left_table": strat['source_table'],
+            "right_table": strat['target_table'],
+            "left_column": j.get('from_key') or j.get('left_column', ''),
+            "right_column": j.get('to_key') or j.get('right_column', ''),
+            "condition": strat['join_condition'],
+            "join_type": j.get('join_type', 'JOIN'),
+            "raw_statement": j.get('raw_statement', ''),
+            "recommended_implementation": strat['recommended_implementation'],
+            "alternative_implementation": strat['alternative_implementation'],
+            "confidence": strat['confidence'],
+            "review_level": strat['review_level'],
+            "reason": strat['reason'],
+        })
+
+    # 3. Filters
+    for f in parsed.get('filter_parameter_mapping', []):
+        if f.get('type') in {'WHERE', 'IF'}:
+            expr = f.get('expression', '')
+            field, op, val = parse_filter_expression(expr)
+            logic['filters'].append({
+                "expression": expr,
+                "field": field,
+                "operator": op,
+                "value": val,
+                "parameters": f.get('parameters', []),
+                "filter_type": f.get('type', 'WHERE'),
+            })
+
+    # 4. Calculations (DEFINE & COMPUTE)
+    for d in parsed.get('define_fields', []):
+        logic['calculations'].append({
+            "name": d.get('field', ''),
+            "expression": d.get('formula', ''),
+            "type": "DEFINE",
+            "format": d.get('format', ''),
+            "source_table": d.get('source', ''),
+            "formula_type": classify_formula(d.get('formula', '')),
+            "raw_fields": d.get('raw_fields', []),
+        })
+    for c in parsed.get('compute_fields', []):
+        logic['calculations'].append({
+            "name": c.get('field', ''),
+            "expression": c.get('formula', ''),
+            "type": "COMPUTE",
+            "format": c.get('format', ''),
+            "source_table": c.get('source', ''),
+            "formula_type": classify_formula(c.get('formula', '')),
+            "raw_fields": c.get('raw_fields', []),
+            "alias": c.get('alias', ''),
+        })
+
+    # 5. Mappings (DECODE)
+    seen_mappings = set()
+    for m in parsed.get('mapping_table_preview', []):
+        tbl = m.get('Mapping Table Name', '')
+        if tbl not in seen_mappings:
+            seen_mappings.add(tbl)
+            pairs = [
+                (r['Source Value'], r['Mapped Value'])
+                for r in parsed.get('mapping_table_preview', [])
+                if r.get('Mapping Table Name') == tbl
+            ]
+            logic['mappings'].append({
+                "table_name": tbl,
+                "derived_field": m.get('Derived Field', ''),
+                "source_field": m.get('Source Field', ''),
+                "pairs": pairs,
+                "source_type": "DECODE",
+            })
+
+    # 6. Aggregations (SUM, AVG, MIN, MAX, COUNT)
+    seen_aggs = set()
+    for a in parsed.get('aggregations_raw', []):
+        fn = (a.get('function') or a.get('verb', '')).upper()
+        if fn in {'SUM', 'AVE', 'AVG', 'MIN', 'MAX', 'COUNT', 'CNT'}:
+            norm_fn = 'AVG' if fn == 'AVE' else fn
+            key = (norm_fn, a.get('field', ''), a.get('source', ''))
+            if key not in seen_aggs:
+                seen_aggs.add(key)
+                logic['aggregations'].append({
+                    "function": norm_fn,
+                    "field": a.get('field', ''),
+                    "source_table": a.get('source', ''),
+                    "is_calculated": a.get('is_calculated', False),
+                })
+
+    # 7. Groupings (BY, ACROSS)
+    seen_groups = set()
+    for g in parsed.get('groupings_raw', []):
+        gtype = g.get('type', 'BY').upper()
+        gfield = g.get('field', '')
+        gsource = g.get('source_table') or g.get('source', '')
+        key = (gtype, gfield, gsource)
+        if key not in seen_groups:
+            seen_groups.add(key)
+            logic['groupings'].append({
+                "type": gtype,
+                "field": gfield,
+                "source_table": gsource,
+                "is_calculated": g.get('is_calculated', False),
+            })
+
+    # 8. Parameters
+    seen_params = set()
+    for f in parsed.get('filter_parameter_mapping', []):
+        for p in f.get('parameters', []):
+            if p not in seen_params:
+                seen_params.add(p)
+                logic['parameters'].append({
+                    "name": p,
+                    "clean_name": p.lstrip('&'),
+                    "referenced_in": [f.get('expression', '')],
+                })
+    for c in logic['calculations']:
+        for p in extract_parameters(c.get('expression', '')):
+            if p not in seen_params:
+                seen_params.add(p)
+                logic['parameters'].append({
+                    "name": p,
+                    "clean_name": p.lstrip('&'),
+                    "referenced_in": [f"calc: {c.get('name')}"],
+                })
+
+    # 9. Outputs
+    for h in parsed.get('hold_lineage', []):
+        logic['outputs'].append({
+            "name": h.get('Output Table', ''),
+            "format": h.get('Output Format', ''),
+            "command": h.get('Step Type', 'HOLD'),
+            "role": h.get('Output Role', ''),
+            "source_table": h.get('Input Table(s)', ''),
+        })
+
+    # 10. Semantic Model (Pyramid Model Pro Representation)
+    sem_tables = []
+    for s in logic['sources']:
+        sem_tables.append({
+            "table_name": s['name'],
+            "role": "Data Flow Staging Table" if s.get('is_hold') else "Model Table",
+            "source_type": s.get('type', 'Table/Synonym'),
+            "is_hold": s.get('is_hold', False),
+            "description": f"Pyramid Data Model table representing {s['name']}",
+        })
+
+    sem_columns = []
+    seen_cols = set()
+    for sf in parsed.get('source_fields', []):
+        key = (sf.get('source', ''), sf.get('field', ''))
+        if key not in seen_cols and sf.get('field'):
+            seen_cols.add(key)
+            sem_columns.append({
+                "table_name": sf.get('source', ''),
+                "column_name": sf.get('field', ''),
+                "data_type": "Database Column",
+                "role": "Attribute / Dimension",
+                "origin": "Source DB",
+            })
+    for df in parsed.get('define_fields', []):
+        key = (df.get('source', ''), df.get('field', ''))
+        if key not in seen_cols and df.get('field'):
+            seen_cols.add(key)
+            sem_columns.append({
+                "table_name": df.get('source', ''),
+                "column_name": df.get('field', ''),
+                "data_type": df.get('format', 'A'),
+                "role": "Calculated Column",
+                "origin": "DEFINE",
+                "formula": df.get('formula', ''),
+            })
+
+    sem_measures = []
+    seen_meas = set()
+    for agg in logic['aggregations']:
+        key = (agg.get('source_table', ''), agg.get('field', ''), agg.get('function', 'SUM'))
+        if key not in seen_meas and agg.get('field'):
+            seen_meas.add(key)
+            sem_measures.append({
+                "measure_name": f"{agg['function']}_{agg['field']}",
+                "source_field": agg['field'],
+                "table_name": agg.get('source_table', ''),
+                "aggregation": agg['function'],
+                "type": "Standard Aggregate Measure",
+                "pql_formula": f"{agg['function']}([{agg.get('source_table', '')}].[{agg['field']}])",
+            })
+    for comp in parsed.get('compute_fields', []):
+        key = (comp.get('source', ''), comp.get('field', ''), 'COMPUTE')
+        if key not in seen_meas and comp.get('field'):
+            seen_meas.add(key)
+            sem_measures.append({
+                "measure_name": comp.get('field', ''),
+                "source_field": ', '.join(comp.get('raw_fields', [])),
+                "table_name": comp.get('source', ''),
+                "aggregation": "Custom Formulate PQL",
+                "type": "Calculated Measure (PQL)",
+                "pql_formula": comp.get('formula', ''),
+            })
+
+    sem_relationships = []
+    for j in logic['joins']:
+        strat = decide_pyramid_join_strategy(j, parsed.get('hold_names'))
+        sem_relationships.append({
+            "from_table": strat['source_table'],
+            "to_table": strat['target_table'],
+            "from_column": j.get('left_column', ''),
+            "to_column": j.get('right_column', ''),
+            "condition": strat['join_condition'],
+            "implementation": strat['recommended_implementation'],
+            "alternative": strat['alternative_implementation'],
+            "confidence": strat['confidence'],
+            "review_level": strat['review_level'],
+            "reason": strat['reason'],
+        })
+
+    sem_hierarchies = []
+    # Calendar / Time hierarchy
+    date_keywords = ['YEAR', 'MONTH', 'DAY']
+    matched_date_cols = []
+    for kw in date_keywords:
+        for c in sem_columns:
+            if kw in c['column_name'].upper() and c['column_name'] not in matched_date_cols:
+                matched_date_cols.append(c['column_name'])
+                break
+    if len(matched_date_cols) >= 2:
+        tbl = sem_columns[0]['table_name'] if sem_columns else 'Model'
+        sem_hierarchies.append({
+            "name": "Calendar Hierarchy",
+            "table_name": tbl,
+            "levels": matched_date_cols,
+            "type": "Time Hierarchy",
+            "description": f"Drill-down path: {' -> '.join(matched_date_cols)}",
+        })
+
+    # Dimensional drill hierarchy from multi-level BY clauses
+    by_groups_by_table = defaultdict(list)
+    for g in logic['groupings']:
+        if g.get('type') == 'BY':
+            tbl = g.get('source_table', '')
+            fld = g.get('field', '')
+            if fld and fld not in by_groups_by_table[tbl]:
+                by_groups_by_table[tbl].append(fld)
+    for tbl, fields in by_groups_by_table.items():
+        if len(fields) >= 2 and fields != matched_date_cols:
+            sem_hierarchies.append({
+                "name": f"{tbl} Drill Hierarchy",
+                "table_name": tbl,
+                "levels": fields,
+                "type": "Attribute Hierarchy",
+                "description": f"Drill-down path: {' -> '.join(fields)}",
+            })
+
+    logic['semantic_model'] = {
+        "tables": sem_tables,
+        "columns": sem_columns,
+        "measures": sem_measures,
+        "relationships": sem_relationships,
+        "hierarchies": sem_hierarchies,
+    }
+
+    return logic
+
+
+def map_generic_to_pyramid(logic):
+    plan_items = []
+
+    # 1. Sources
+    for s in logic.get('sources', []):
+        if s.get('is_hold'):
+            target = "Pyramid Data Flow Step"
+            action = f"Configure intermediate Data Flow transformation node for table '{s['name']}'"
+            review = "recommended"
+            conf = 85
+            reason = "Intermediate pipeline HOLD table created by WebFOCUS multi-pass execution"
+        else:
+            target = "Data Source / Model Table"
+            action = f"Add table '{s['name']}' to Pyramid Data Model"
+            review = "automatic"
+            conf = 95
+            reason = "Direct operational or warehouse table source"
+        plan_items.append({
+            "category": "Source",
+            "name": s['name'],
+            "webfocus_logic": f"TABLE/FILE {s['name']}",
+            "pyramid_target": target,
+            "pyramid_action": action,
+            "review_level": review,
+            "confidence": conf,
+            "reason": reason,
+        })
+
+    # 2. Joins
+    for j in logic.get('joins', []):
+        strat = decide_pyramid_join_strategy(j)
+        plan_items.append({
+            "category": "Relationship",
+            "name": f"{strat['source_table']} -> {strat['target_table']}",
+            "webfocus_logic": j.get('raw_statement') or strat['join_condition'],
+            "pyramid_target": strat['recommended_implementation'],
+            "pyramid_action": strat['action'],
+            "recommended_implementation": strat['recommended_implementation'],
+            "alternative_implementation": strat['alternative_implementation'],
+            "review_level": strat['review_level'],
+            "confidence": strat['confidence'],
+            "reason": strat['reason'],
+        })
+
+    # 3. Calculations (with DECODE consolidation)
+    mapping_by_field = {m['derived_field'].upper(): m for m in logic.get('mappings', []) if m.get('derived_field')}
+    handled_decode_fields = set()
+
+    for c in logic.get('calculations', []):
+        c_name = c.get('name', '')
+        c_upper = c_name.upper()
+        ftype = c.get('formula_type', '')
+        is_define = c.get('type') == 'DEFINE'
+
+        if c_upper in mapping_by_field:
+            m = mapping_by_field[c_upper]
+            handled_decode_fields.add(c_upper)
+            pairs_count = len(m.get('pairs', []))
+            tbl_name = m.get('table_name', f"map_{m.get('source_field')}_{c_name}")
+            src_fld = m.get('source_field', 'Key')
+
+            if pairs_count <= 10:
+                target = "Calculated Column (PQL Case)"
+                action = f"Create Calculated Column '{c_name}' using inline PQL Case() (recommended for {pairs_count} pairs), or join to Model Lookup Table '{tbl_name}'"
+                rec = "PQL Case Expression in Data Model / Prep"
+                alt = f"Model Lookup Table '{tbl_name}' joined on [{src_fld}]"
+                conf = 90
+                reason = f"DECODE mapping dictionary with {pairs_count} value pairs. Inline PQL Case is optimal for small dictionaries (<= 10 pairs)."
+            else:
+                target = "Model Lookup Table or PQL Case"
+                action = f"Build Model Lookup Table '{tbl_name}' and join to model on [{src_fld}], or use PQL Case"
+                rec = f"Model Lookup Table '{tbl_name}'"
+                alt = "PQL Case Expression in Data Model / Prep"
+                conf = 85
+                reason = f"DECODE mapping dictionary with {pairs_count} value pairs. Lookup Table recommended for maintainability with large dictionaries (> 10 pairs)."
+
+            plan_items.append({
+                "category": "Calculation (DECODE)",
+                "name": c_name,
+                "webfocus_logic": f"{c.get('type')}: {c_name} = {c.get('expression')}",
+                "pyramid_target": target,
+                "pyramid_action": action,
+                "recommended_implementation": rec,
+                "alternative_implementation": alt,
+                "review_level": "recommended",
+                "confidence": conf,
+                "reason": reason,
+            })
+            continue
+
+        if is_define:
+            target = "Calculated Column"
+            action = f"Create Calculated Column '{c_name}' in Pyramid Data Model/Prep"
+        else:
+            target = "Formulate Measure (PQL)"
+            action = f"Create Formulate Custom Measure '{c_name}' using PQL"
+
+        if 'Conditional IF' in ftype:
+            review = "recommended"
+            conf = 80
+            reason = "Conditional logic maps to Pyramid If() or PQL Case expression"
+        elif 'Arithmetic' in ftype:
+            review = "automatic"
+            conf = 95
+            reason = "Standard arithmetic formula directly supported in Pyramid"
+        elif 'Date/Time' in ftype or 'Concatenation/String' in ftype:
+            review = "recommended"
+            conf = 85
+            reason = f"Maps to Pyramid date/string functions ({ftype})"
+        else:
+            review = "manual_review"
+            conf = 60
+            reason = "Complex or unparsed custom WebFOCUS formula syntax"
+
+        plan_items.append({
+            "category": "Calculation",
+            "name": c_name,
+            "webfocus_logic": f"{c.get('type')}: {c_name} = {c.get('expression')}",
+            "pyramid_target": target,
+            "pyramid_action": action,
+            "review_level": review,
+            "confidence": conf,
+            "reason": reason,
+        })
+
+    # 4. Filters
+    for f in logic.get('filters', []):
+        target = "Discover Filter / Slicer"
+        if f.get('parameters'):
+            action = f"Add slicer on [{f.get('field')}] bound to Parameter '{f.get('parameters')[0]}'"
+            review = "automatic"
+            conf = 90
+            reason = "Parameterized filter directly supported via Pyramid Slicer / Global Parameter"
+        elif f.get('operator') in {'EQ', 'NE', 'GT', 'LT', 'GE', 'LE', 'IN'}:
+            action = f"Filter [{f.get('field')}] {f.get('operator')} {f.get('value')}"
+            review = "automatic"
+            conf = 95
+            reason = "Standard comparison filter directly supported in Pyramid Discover / Data Flow"
+        else:
+            action = f"Custom filter on [{f.get('field')}]: {f.get('expression')}"
+            review = "recommended"
+            conf = 80
+            reason = "Complex or compound filter condition"
+
+        plan_items.append({
+            "category": "Filter",
+            "name": f.get('field', 'Filter'),
+            "webfocus_logic": f.get('expression', ''),
+            "pyramid_target": target,
+            "pyramid_action": action,
+            "review_level": review,
+            "confidence": conf,
+            "reason": reason,
+        })
+
+    # 5. Parameters
+    for p in logic.get('parameters', []):
+        plan_items.append({
+            "category": "Parameter",
+            "name": p.get('name', ''),
+            "webfocus_logic": f"Runtime prompt {p.get('name')}",
+            "pyramid_target": "Parameter / Global List",
+            "pyramid_action": f"Create Pyramid Formulate Parameter '{p.get('clean_name')}'",
+            "review_level": "automatic",
+            "confidence": 95,
+            "reason": "WebFOCUS ampersand variable maps to Pyramid Formulate Parameter",
+        })
+
+    # 6. Mappings (DECODE)
+    for m in logic.get('mappings', []):
+        derived = m.get('derived_field', '')
+        if derived.upper() in handled_decode_fields:
+            # Consolidated with calculation entry above to eliminate duplicate REGION_NAME
+            continue
+
+        pairs_count = len(m.get('pairs', []))
+        plan_items.append({
+            "category": "Mapping",
+            "name": derived or 'Mapping',
+            "webfocus_logic": f"DECODE on {m.get('source_field')} with {pairs_count} pairs",
+            "pyramid_target": "Model Lookup Table or PQL Case",
+            "pyramid_action": f"Build lookup table '{m.get('table_name')}' or use PQL Case for {derived}",
+            "review_level": "recommended" if pairs_count <= 10 else "manual_review",
+            "confidence": 90 if pairs_count <= 10 else 75,
+            "reason": f"DECODE mapping dictionary with {pairs_count} value pairs",
+        })
+
+    # 7. Aggregations (SUM/AVG/etc.)
+    for a in logic.get('aggregations', []):
+        plan_items.append({
+            "category": "Aggregation",
+            "name": a.get('field', ''),
+            "webfocus_logic": f"{a.get('function')} {a.get('field')}",
+            "pyramid_target": "Formulate Measure (PQL)",
+            "pyramid_action": f"Aggregate [{a.get('field')}] using {a.get('function')}() in Pyramid",
+            "review_level": "automatic",
+            "confidence": 95,
+            "reason": f"Explicit WebFOCUS {a.get('function')} roll-up aggregation",
+        })
+
+    # 8. Groupings (BY/ACROSS)
+    for g in logic.get('groupings', []):
+        plan_items.append({
+            "category": "Grouping",
+            "name": g.get('field', ''),
+            "webfocus_logic": f"{g.get('type')} {g.get('field')}",
+            "pyramid_target": "Discover Visual (Grid/Chart)",
+            "pyramid_action": f"Add attribute [{g.get('field')}] to Discover visual Rows/Columns",
+            "review_level": "automatic",
+            "confidence": 95,
+            "reason": f"WebFOCUS {g.get('type')} clause maps to dimensional hierarchy/attribute in visual layout",
+        })
+
+    # 9. Outputs
+    for o in logic.get('outputs', []):
+        is_hold = 'HOLD' in str(o.get('command', '')).upper()
+        plan_items.append({
+            "category": "Output",
+            "name": o.get('name') or 'Final Report Output',
+            "webfocus_logic": f"{o.get('command')} {o.get('name')} FORMAT {o.get('format')}",
+            "pyramid_target": "Pyramid Data Flow Target" if is_hold else "Present Dashboard / Publish Publication",
+            "pyramid_action": f"Materialize staging dataset '{o.get('name')}' in Data Flow" if is_hold else f"Publish Discover visual/report in {o.get('format')} format",
+            "review_level": "recommended" if is_hold else "automatic",
+            "confidence": 85 if is_hold else 95,
+            "reason": f"{o.get('role')} ({o.get('command')} AS {o.get('name')} FORMAT {o.get('format')})",
+        })
+
+    return plan_items
+
+
 def parse_fex(fex_text):
     text = strip_comments(fex_text)
     explicit_hold_names = extract_hold_names(text)
@@ -2433,6 +3076,10 @@ def parse_fex(fex_text):
         'final_dataset_plan': [],
         'pyramid_build_plan': [],
         'drilldowns': [],
+        'aggregations_raw': [],
+        'groupings_raw': [],
+        'migration_logic': {},
+        'pyramid_modeler_plan': [],
     }
 
     table_src = re.findall(r'TABLE\s+FILE\s+(\S+)', text, re.IGNORECASE)
@@ -2536,17 +3183,46 @@ def parse_fex(fex_text):
                     result['sum_real'].append({'field': fn, 'source': tbl_src})
                     raw_set.add((fn, tbl_src))
 
-        for m in re.finditer(r'\bBY\s+([A-Za-z_]\w*)', block, re.IGNORECASE):
-            fn = m.group(1)
+        # Explicit aggregations (SUM, AVE, MIN, MAX, COUNT, etc.) vs PRINT
+        for agg_m in re.finditer(
+            r'\b(SUM|PRINT|AVE|AVG|MIN|MAX|COUNT|CNT)\b(.*?)(?=\b(?:SUM|PRINT|AVE|AVG|MIN|MAX|COUNT|CNT|BY|ACROSS|COMPUTE|WHERE|IF|ON\s+TABLE|HEADING|FOOTING)\b|\nEND\b|\Z)',
+            block,
+            re.IGNORECASE | re.DOTALL
+        ):
+            v_verb = agg_m.group(1).upper()
+            v_body = agg_m.group(2)
+            v_fields = extract_print_sum_fields(v_body, defined_names)
+            for v_fn in v_fields:
+                is_calc = v_fn.upper() in defined_names
+                result['aggregations_raw'].append({
+                    'function': v_verb,
+                    'verb': v_verb,
+                    'field': v_fn,
+                    'source': tbl_src,
+                    'is_calculated': is_calc,
+                })
+
+        for m in re.finditer(r'\b(BY|ACROSS)\s+([A-Za-z_][\w.]*)', block, re.IGNORECASE):
+            gtype = m.group(1).upper()
+            fn = m.group(2)
 
             if fn.upper() in ('TABLE', 'ON', 'END'):
                 continue
 
-            if fn.upper() in defined_names:
-                result['by_calc'].append({'field': fn, 'source': tbl_src})
-            else:
-                result['by_real'].append({'field': fn, 'source': tbl_src})
-                raw_set.add((fn, tbl_src))
+            is_calc = fn.upper() in defined_names
+            if gtype == 'BY':
+                if is_calc:
+                    result['by_calc'].append({'field': fn, 'source': tbl_src})
+                else:
+                    result['by_real'].append({'field': fn, 'source': tbl_src})
+                    raw_set.add((fn, tbl_src))
+
+            result['groupings_raw'].append({
+                'type': gtype,
+                'field': fn,
+                'source': tbl_src,
+                'is_calculated': is_calc,
+            })
 
     seen = set()
 
@@ -2567,12 +3243,26 @@ def parse_fex(fex_text):
     result['filter_parameter_mapping'] = extract_filter_parameter_mapping(text, all_defined_names)
     result['output_formats'] = extract_output_formats(text)
     result['join_match_mapping'] = extract_join_match_mapping(text)
+
+    # Incorporate join tables into sources and real_sources
+    for jm in result['join_match_mapping']:
+        for side in ('from_table', 'to_table'):
+            tbl = jm.get(side, '').strip()
+            if tbl and tbl not in result['sources']:
+                result['sources'].append(tbl)
+            if tbl and tbl not in result['real_sources'] and not is_hold_like_table(tbl, explicit_hold_names):
+                result['real_sources'].append(tbl)
+
     result['source_inventory'] = extract_source_inventory(result)
     result['hold_lineage'] = extract_hold_lineage(text, result)
     result['mapping_table_preview'] = extract_mapping_table_preview(result)
     result['final_dataset_plan'] = recommend_final_dataset(result)
     result['pyramid_build_plan'] = build_pyramid_plan(result)
     result['drilldowns'] = extract_drilldowns(text)
+
+    # Generic migration representation and Pyramid Modeler plan
+    result['migration_logic'] = build_generic_migration_representation(result)
+    result['pyramid_modeler_plan'] = map_generic_to_pyramid(result['migration_logic'])
 
     return result
 
@@ -2940,6 +3630,12 @@ def build_display_tables(parsed_results, duplicate_records, allowed_program_name
     build_plan_rows = []
     drilldown_rows = []
     validation_rows = []
+    modeler_plan_rows = []
+    semantic_tables_rows = []
+    semantic_columns_rows = []
+    semantic_measures_rows = []
+    semantic_relationships_rows = []
+    semantic_hierarchies_rows = []
 
     for folder, fex_name, parsed in parsed_results:
         dup = duplicate_lookup.get((folder, fex_name), {})
@@ -3113,6 +3809,36 @@ def build_display_tables(parsed_results, duplicate_records, allowed_program_name
             row.update(item)
             drilldown_rows.append(row)
 
+        for item in parsed.get('pyramid_modeler_plan', []):
+            row = {'File Path': folder, 'File Name': fex_name}
+            row.update(item)
+            modeler_plan_rows.append(row)
+
+        sem = parsed.get('migration_logic', {}).get('semantic_model', {})
+        for item in sem.get('tables', []):
+            row = {'File Path': folder, 'File Name': fex_name}
+            row.update(item)
+            semantic_tables_rows.append(row)
+        for item in sem.get('columns', []):
+            row = {'File Path': folder, 'File Name': fex_name}
+            row.update(item)
+            semantic_columns_rows.append(row)
+        for item in sem.get('measures', []):
+            row = {'File Path': folder, 'File Name': fex_name}
+            row.update(item)
+            semantic_measures_rows.append(row)
+        for item in sem.get('relationships', []):
+            row = {'File Path': folder, 'File Name': fex_name}
+            row.update(item)
+            semantic_relationships_rows.append(row)
+        for item in sem.get('hierarchies', []):
+            row = {'File Path': folder, 'File Name': fex_name}
+            row_dict = dict(item)
+            if isinstance(row_dict.get('levels'), list):
+                row_dict['levels'] = ' -> '.join(str(lvl) for lvl in row_dict['levels'])
+            row.update(row_dict)
+            semantic_hierarchies_rows.append(row)
+
     matched_lookup = defaultdict(list)
     for ra_program, fex_name in matched_pairs:
         matched_lookup[ra_program].append(fex_name)
@@ -3141,6 +3867,13 @@ def build_display_tables(parsed_results, duplicate_records, allowed_program_name
         'duplicates': pd.DataFrame(duplicate_rows),
         'resource_analyzer': pd.DataFrame(ra_rows),
         'validation': pd.DataFrame(validation_rows),
+        'modeler_plan': pd.DataFrame(modeler_plan_rows),
+        'semantic_tables': pd.DataFrame(semantic_tables_rows),
+        'semantic_columns': pd.DataFrame(semantic_columns_rows),
+        'semantic_measures': pd.DataFrame(semantic_measures_rows),
+        'semantic_relationships': pd.DataFrame(semantic_relationships_rows),
+        'semantic_hierarchies': pd.DataFrame(semantic_hierarchies_rows),
+        'parsed_results_map': {(folder, fex_name): parsed for folder, fex_name, parsed in parsed_results},
     }
 
 
@@ -4864,7 +5597,7 @@ def render_duplicate_code_diff(report_row, duplicate_df, overview_df, raw_fex_co
     diff_html = render_diff_blocks_html(blocks, selected_name, match_name)
     st.markdown(diff_html, unsafe_allow_html=True)
     
-def build_single_report_excel(report_row, field_df, formula_df, filter_df, join_df, source_df, lineage_df, mapping_df, final_df, drilldown_df, build_plan_df):
+def build_single_report_excel(report_row, field_df, formula_df, filter_df, join_df, source_df, lineage_df, mapping_df, final_df, drilldown_df, build_plan_df, modeler_plan_df=None, semantic_model_df=None):
     """Builds a small multi-sheet Excel workbook containing only the selected
     report's data, so a user can download one report at a time instead of
     the full combined workbook."""
@@ -4885,6 +5618,8 @@ def build_single_report_excel(report_row, field_df, formula_df, filter_df, join_
             ('Final Dataset', final_df),
             ('Drilldowns', drilldown_df),
             ('Build Plan', build_plan_df),
+            ('Modeler Flow', modeler_plan_df),
+            ('Semantic Model', semantic_model_df),
         ]
 
         for sheet_name, df in sheets:
@@ -6179,22 +6914,175 @@ def render_filters_tab(filter_df):
         show_table_or_info(filter_df[cols] if filter_df is not None and not filter_df.empty else filter_df, "No filter expressions found.")
 
 
-def render_pyramid_build_plan(report_row, source_df, lineage_df, join_df, filter_df, formula_df, mapping_df, final_df, field_df, drilldown_df=None):
-    st.info("The full evidence workbook is available from the Download Full Excel Report button.")
-    ai_tab, sql_tab, prep_tab, model_calc_tab, visual_tab, validation_tab = st.tabs([
-        "AI Build Plan", "SQL View", "Pyramid Data Flow / Data Model", "Data Model & Calculated Fields", "Visuals", "Validation",
+def render_structured_modeler_flow(modeler_plan_df, generic_logic=None):
+    st.markdown("### 🗺️ Structured Pyramid Modeler Flow")
+    st.caption("End-to-end migration pipeline mapping WebFOCUS business logic directly to Pyramid Analytics architecture layers.")
+
+    if modeler_plan_df is None or modeler_plan_df.empty:
+        st.info("No structured modeler flow items were generated for this report.")
+        return
+
+    # 1. Summary Metrics
+    total_items = len(modeler_plan_df)
+    rev_counts = modeler_plan_df['review_level'].value_counts()
+    auto_count = rev_counts.get('automatic', 0)
+    rec_count = rev_counts.get('recommended', 0)
+    manual_count = rev_counts.get('manual_review', 0)
+
+    auto_pct = (auto_count / total_items * 100) if total_items else 0
+    rec_pct = (rec_count / total_items * 100) if total_items else 0
+    manual_pct = (manual_count / total_items * 100) if total_items else 0
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        with st.container(border=True):
+            st.metric("Total Elements", total_items)
+    with c2:
+        with st.container(border=True):
+            st.metric("Automatic", f"{auto_count} ({auto_pct:.0f}%)")
+    with c3:
+        with st.container(border=True):
+            st.metric("Recommended", f"{rec_count} ({rec_pct:.0f}%)")
+    with c4:
+        with st.container(border=True):
+            st.metric("Manual Review", f"{manual_count} ({manual_pct:.0f}%)")
+
+    # 2. Filters for user exploration
+    fc1, fc2 = st.columns(2)
+    categories = ['All'] + sorted(modeler_plan_df['category'].dropna().unique().tolist())
+    review_levels = ['All'] + sorted(modeler_plan_df['review_level'].dropna().unique().tolist())
+
+    file_tag = str(modeler_plan_df.iloc[0].get('File Name', 'report'))
+    with fc1:
+        sel_cat = st.selectbox("Filter by Category", categories, key=f"mod_cat_{file_tag}")
+    with fc2:
+        sel_rev = st.selectbox("Filter by Review Level", review_levels, key=f"mod_rev_{file_tag}")
+
+    filtered_df = modeler_plan_df
+    if sel_cat != 'All':
+        filtered_df = filtered_df[filtered_df['category'] == sel_cat]
+    if sel_rev != 'All':
+        filtered_df = filtered_df[filtered_df['review_level'] == sel_rev]
+
+    # 3. Interactive Dataframe
+    display_cols = [
+        'category', 'name', 'webfocus_logic', 'pyramid_target',
+        'pyramid_action', 'review_level', 'confidence', 'reason'
+    ]
+    avail_cols = [c for c in display_cols if c in filtered_df.columns]
+    st.dataframe(filtered_df[avail_cols], use_container_width=True, hide_index=True)
+
+    # 4. Generic Migration Logic JSON representation
+    if generic_logic:
+        with st.expander("🔍 View Generic Migration Representation (JSON)", expanded=False):
+            st.caption("Language-neutral intermediate representation extracted from WebFOCUS code before Pyramid targeting.")
+            st.json(generic_logic)
+
+
+def render_semantic_model_inspector(semantic_model, generic_logic=None):
+    st.markdown("### 🏛️ Pyramid Semantic Model (Model Pro)")
+    st.caption("Pyramid Analytics semantic layer representation: Model Tables, Attributes, Measures, Relationships, and Hierarchies.")
+
+    if not semantic_model or not any(semantic_model.get(k) for k in ('tables', 'columns', 'measures', 'relationships', 'hierarchies')):
+        st.info("No semantic model elements were generated for this report.")
+        return
+
+    tables = semantic_model.get('tables', [])
+    columns = semantic_model.get('columns', [])
+    measures = semantic_model.get('measures', [])
+    relationships = semantic_model.get('relationships', [])
+    hierarchies = semantic_model.get('hierarchies', [])
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    with c1:
+        with st.container(border=True):
+            st.metric("Model Tables", len(tables))
+    with c2:
+        with st.container(border=True):
+            st.metric("Attributes / Cols", len(columns))
+    with c3:
+        with st.container(border=True):
+            st.metric("Measures", len(measures))
+    with c4:
+        with st.container(border=True):
+            st.metric("Relationships", len(relationships))
+    with c5:
+        with st.container(border=True):
+            st.metric("Hierarchies", len(hierarchies))
+
+    sem_tabs = st.tabs([
+        "📋 Model Tables",
+        "🏷️ Attributes & Columns",
+        "📊 Measures & PQL Formulas",
+        "🔗 Relationships",
+        "🌲 Hierarchies",
     ])
-    with ai_tab:
+
+    with sem_tabs[0]:
+        st.markdown("#### Model Tables & Data Flow Staging")
+        if tables:
+            st.dataframe(pd.DataFrame(tables), use_container_width=True, hide_index=True)
+        else:
+            st.info("No tables detected.")
+
+    with sem_tabs[1]:
+        st.markdown("#### Column Attributes & Calculated Columns")
+        if columns:
+            st.dataframe(pd.DataFrame(columns), use_container_width=True, hide_index=True)
+        else:
+            st.info("No columns detected.")
+
+    with sem_tabs[2]:
+        st.markdown("#### Pyramid Measures & PQL Expressions")
+        if measures:
+            st.dataframe(pd.DataFrame(measures), use_container_width=True, hide_index=True)
+        else:
+            st.info("No measures detected.")
+
+    with sem_tabs[3]:
+        st.markdown("#### Relationships & Join Implementation Strategy")
+        if relationships:
+            st.dataframe(pd.DataFrame(relationships), use_container_width=True, hide_index=True)
+        else:
+            st.info("No relationships detected.")
+
+    with sem_tabs[4]:
+        st.markdown("#### Drill-down & Time Hierarchies")
+        if hierarchies:
+            disp_h = []
+            for h in hierarchies:
+                hd = dict(h)
+                if isinstance(hd.get('levels'), list):
+                    hd['levels'] = ' -> '.join(str(x) for x in hd['levels'])
+                disp_h.append(hd)
+            st.dataframe(pd.DataFrame(disp_h), use_container_width=True, hide_index=True)
+        else:
+            st.info("No hierarchies detected.")
+
+    with st.expander("🔍 View Full Semantic Model (JSON)", expanded=False):
+        st.json(semantic_model)
+
+
+def render_pyramid_build_plan(report_row, source_df, lineage_df, join_df, filter_df, formula_df, mapping_df, final_df, field_df, drilldown_df=None, modeler_plan_df=None, generic_logic=None):
+    st.info("The full evidence workbook is available from the Download Full Excel Report button.")
+    tabs = st.tabs([
+        "Structured Modeler Flow", "Pyramid Semantic Model", "AI Build Plan", "SQL View", "Pyramid Data Flow / Data Model", "Data Model & Calculated Fields", "Visuals", "Validation",
+    ])
+    with tabs[0]:
+        render_structured_modeler_flow(modeler_plan_df, generic_logic)
+    with tabs[1]:
+        render_semantic_model_inspector(generic_logic.get('semantic_model') if generic_logic else None, generic_logic)
+    with tabs[2]:
         render_ai_build_plan(report_row, source_df, lineage_df, join_df, filter_df, formula_df, mapping_df, final_df, field_df)
-    with sql_tab:
+    with tabs[3]:
         render_sql_view_recommendation_inspector(report_row, source_df, lineage_df, join_df, filter_df, formula_df)
-    with prep_tab:
+    with tabs[4]:
         render_data_prep_inspector(report_row)
-    with model_calc_tab:
+    with tabs[5]:
         render_data_model_and_calc_inspector(report_row, source_df, mapping_df, field_df, formula_df)
-    with visual_tab:
+    with tabs[6]:
         render_visuals_inspector(report_row, final_df, field_df)
-    with validation_tab:
+    with tabs[7]:
         render_validation_checklist(report_row, join_df, final_df, drilldown_df)
 
 
@@ -6418,6 +7306,9 @@ if analysis_result:
                 join_df = filter_report_df(display_tables['joins'], selected_name, selected_path)
                 duplicate_df = filter_report_df(display_tables['duplicates'], selected_name, selected_path)
                 drilldown_df = filter_report_df(display_tables['drilldowns'], selected_name, selected_path)
+                modeler_plan_df = filter_report_df(display_tables.get('modeler_plan', pd.DataFrame()), selected_name, selected_path)
+                parsed_for_report = display_tables.get('parsed_results_map', {}).get((selected_path, selected_name))
+                generic_logic = parsed_for_report.get('migration_logic') if parsed_for_report else None
 
                 st.subheader(f"Report Inspector: {selected_name}")
 
@@ -6439,9 +7330,62 @@ if analysis_result:
                     with st.container(border=True):
                         st.metric("Drilldowns", int(report_row.get('Drilldown Count', 0)))
 
+                sem_rows = []
+                if generic_logic and 'semantic_model' in generic_logic:
+                    sm = generic_logic['semantic_model']
+                    for t in sm.get('tables', []):
+                        sem_rows.append({
+                            'Component': 'Model Table',
+                            'Name': t.get('table_name', ''),
+                            'Parent / Source': t.get('source_type', ''),
+                            'Pyramid Role / Implementation': t.get('role', ''),
+                            'Expression / Details': t.get('description', ''),
+                            'Review / Confidence': 'automatic' if not t.get('is_hold') else 'recommended',
+                        })
+                    for c in sm.get('columns', []):
+                        sem_rows.append({
+                            'Component': 'Attribute / Column',
+                            'Name': c.get('column_name', ''),
+                            'Parent / Source': c.get('table_name', ''),
+                            'Pyramid Role / Implementation': c.get('role', ''),
+                            'Expression / Details': c.get('formula') or c.get('origin', ''),
+                            'Review / Confidence': 'automatic',
+                        })
+                    for m in sm.get('measures', []):
+                        sem_rows.append({
+                            'Component': 'Measure',
+                            'Name': m.get('measure_name', ''),
+                            'Parent / Source': m.get('table_name', ''),
+                            'Pyramid Role / Implementation': m.get('type', ''),
+                            'Expression / Details': m.get('pql_formula', ''),
+                            'Review / Confidence': 'automatic',
+                        })
+                    for r in sm.get('relationships', []):
+                        sem_rows.append({
+                            'Component': 'Relationship',
+                            'Name': f"{r.get('from_table')} -> {r.get('to_table')}",
+                            'Parent / Source': r.get('from_table', ''),
+                            'Pyramid Role / Implementation': r.get('implementation', ''),
+                            'Expression / Details': r.get('condition', ''),
+                            'Review / Confidence': f"{r.get('review_level', '')} ({r.get('confidence', '')}%) - {r.get('reason', '')}",
+                        })
+                    for h in sm.get('hierarchies', []):
+                        levels_str = ' -> '.join(h.get('levels', [])) if isinstance(h.get('levels'), list) else str(h.get('levels', ''))
+                        sem_rows.append({
+                            'Component': 'Hierarchy',
+                            'Name': h.get('name', ''),
+                            'Parent / Source': h.get('table_name', ''),
+                            'Pyramid Role / Implementation': h.get('type', ''),
+                            'Expression / Details': levels_str,
+                            'Review / Confidence': h.get('description', ''),
+                        })
+                semantic_model_df = pd.DataFrame(sem_rows) if sem_rows else None
+
                 single_report_excel = build_single_report_excel(
                     report_row, field_df, formula_df, filter_df, join_df,
                     source_df, lineage_df, mapping_df, final_df, drilldown_df, build_plan_df,
+                    modeler_plan_df=modeler_plan_df,
+                    semantic_model_df=semantic_model_df,
                 )
                 report_download_key = re.sub(r'[^A-Za-z0-9_]+', '_', f"{selected_name}_{selected_path}")
                 report_file_name = re.sub(r'[^A-Za-z0-9_.-]+', '_', Path(str(selected_name)).stem) + "_report.xlsx"
@@ -6488,7 +7432,10 @@ if analysis_result:
                     render_output_drilldowns_combined(report_row, final_df, drilldown_df, lineage_df)
 
                 with report_tabs[5]:
-                    render_pyramid_build_plan(report_row, source_df, lineage_df, join_df, filter_df, formula_df, mapping_df, final_df, field_df, drilldown_df)
+                    render_pyramid_build_plan(
+                        report_row, source_df, lineage_df, join_df, filter_df, formula_df, mapping_df, final_df, field_df, drilldown_df,
+                        modeler_plan_df=modeler_plan_df, generic_logic=generic_logic,
+                    )
 
                 with report_tabs[6]:
                     table_db_mapping_df = display_tables.get('table_db_mapping')
