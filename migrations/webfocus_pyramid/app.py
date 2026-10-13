@@ -7262,26 +7262,24 @@ def render_technical_architecture_flow(analysis_result=None):
     if analysis_result and isinstance(analysis_result, dict):
         display_tables = analysis_result.get("display_tables", {})
         overview_df = display_tables.get("overview") if isinstance(display_tables, dict) else None
-        total_reports = len(overview_df) if overview_df is not None else 0
-        unique_reports = analysis_result.get("unique_count", 0)
-        total_tables = analysis_result.get("total_tables", 0)
+        total_reports = int(len(overview_df)) if overview_df is not None else 0
+        unique_reports = int(analysis_result.get("unique_count", 0))
+        total_tables = int(analysis_result.get("total_tables", 0))
 
-    stats_badges = ""
     if total_reports > 0:
-        stats_badges = f"""
-        <span class="tech-meta-badge" title="Total analyzed WebFOCUS FEX reports">📊 {total_reports} Reports Ingested</span>
-        <span class="tech-meta-badge" title="Deduplicated report archetypes">🧩 {unique_reports} Unique Archetypes</span>
-        <span class="tech-meta-badge" title="Unique physical source tables identified">🗄️ {total_tables} Source Tables</span>
-        """
+        stats_badges = (
+            f'<span class="tech-meta-badge" title="Total analyzed WebFOCUS FEX reports">📊 {total_reports} Reports Ingested</span> '
+            f'<span class="tech-meta-badge" title="Deduplicated report archetypes">🧩 {unique_reports} Unique Archetypes</span> '
+            f'<span class="tech-meta-badge" title="Unique physical source tables identified">🗄️ {total_tables} Source Tables</span>'
+        )
     else:
-        stats_badges = """
-        <span class="tech-meta-badge">📊 Pipeline Active</span>
-        <span class="tech-meta-badge">🧩 Deterministic AST</span>
-        <span class="tech-meta-badge">🗄️ Automated Mappings</span>
-        """
+        stats_badges = (
+            '<span class="tech-meta-badge">📊 Pipeline Active</span> '
+            '<span class="tech-meta-badge">🧩 Deterministic AST</span> '
+            '<span class="tech-meta-badge">🗄️ Automated Mappings</span>'
+        )
 
-    flow_html = f"""
-<style>
+    flow_html = f"""<style>
 .tech-arch-wrapper {{
     background: var(--kash-section, rgba(127, 127, 127, 0.05));
     border: 1px solid var(--kash-border, rgba(127, 127, 127, 0.2));
@@ -7291,7 +7289,7 @@ def render_technical_architecture_flow(analysis_result=None):
     margin-bottom: 22px;
     box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
 }}
-.tech-arch-header {{
+.tech-arch-wrapper .tech-arch-header {{
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -7301,7 +7299,7 @@ def render_technical_architecture_flow(analysis_result=None):
     padding-bottom: 12px;
     border-bottom: 1px solid var(--kash-border, rgba(127, 127, 127, 0.15));
 }}
-.tech-arch-title-area h3 {{
+.tech-arch-wrapper .tech-arch-title-area h3 {{
     margin: 0 0 4px 0;
     font-size: 1.12rem;
     font-weight: 700;
@@ -7311,17 +7309,17 @@ def render_technical_architecture_flow(analysis_result=None):
     gap: 8px;
     letter-spacing: -0.01em;
 }}
-.tech-arch-subtitle {{
+.tech-arch-wrapper .tech-arch-subtitle {{
     margin: 0;
     font-size: 0.8rem;
     color: var(--kash-muted, #94A3B8);
 }}
-.tech-arch-meta-badges {{
+.tech-arch-wrapper .tech-arch-meta-badges {{
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
 }}
-.tech-meta-badge {{
+.tech-arch-wrapper .tech-meta-badge {{
     display: inline-flex;
     align-items: center;
     gap: 5px;
@@ -7334,28 +7332,28 @@ def render_technical_architecture_flow(analysis_result=None):
     color: var(--kash-navy, var(--text-color, #E2E8F0));
     border: 1px solid var(--kash-border, rgba(127, 127, 127, 0.2));
 }}
-.tech-arch-grid {{
+.tech-arch-wrapper .tech-arch-grid {{
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     gap: 10px;
     margin-bottom: 8px;
 }}
 @media (max-width: 1350px) {{
-    .tech-arch-grid {{
+    .tech-arch-wrapper .tech-arch-grid {{
         grid-template-columns: repeat(4, 1fr);
     }}
 }}
 @media (max-width: 820px) {{
-    .tech-arch-grid {{
+    .tech-arch-wrapper .tech-arch-grid {{
         grid-template-columns: repeat(2, 1fr);
     }}
 }}
 @media (max-width: 500px) {{
-    .tech-arch-grid {{
+    .tech-arch-wrapper .tech-arch-grid {{
         grid-template-columns: 1fr;
     }}
 }}
-.tech-arch-card {{
+.tech-arch-wrapper .tech-arch-card {{
     background: var(--kash-card, var(--background-color, #111827));
     border: 1px solid var(--kash-border, rgba(127, 127, 127, 0.2));
     border-radius: 8px;
@@ -7367,23 +7365,23 @@ def render_technical_architecture_flow(analysis_result=None):
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }}
-.tech-arch-card:hover {{
+.tech-arch-wrapper .tech-arch-card:hover {{
     border-color: #FF5A1F;
     box-shadow: 0 4px 14px rgba(255, 90, 31, 0.12);
 }}
-.tech-arch-card-top {{
+.tech-arch-wrapper .tech-arch-card-top {{
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 6px;
 }}
-.tech-arch-step-num {{
+.tech-arch-wrapper .tech-arch-step-num {{
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: 0.72rem;
     font-weight: 800;
     color: #FF5A1F;
 }}
-.tech-arch-badge {{
+.tech-arch-wrapper .tech-arch-badge {{
     font-size: 0.62rem;
     font-weight: 700;
     padding: 1px 5px;
@@ -7392,15 +7390,14 @@ def render_technical_architecture_flow(analysis_result=None):
     letter-spacing: 0.03em;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }}
-.badge-source {{ background: rgba(59, 130, 246, 0.15); color: #60A5FA; border: 1px solid rgba(59, 130, 246, 0.3); }}
-.badge-extract {{ background: rgba(245, 158, 11, 0.15); color: #FBBF24; border: 1px solid rgba(245, 158, 11, 0.3); }}
-.badge-generic {{ background: rgba(168, 85, 247, 0.15); color: #C084FC; border: 1px solid rgba(168, 85, 247, 0.3); }}
-.badge-target {{ background: rgba(14, 165, 233, 0.15); color: #38BDF8; border: 1px solid rgba(14, 165, 233, 0.3); }}
-.badge-triage {{ background: rgba(234, 88, 12, 0.15); color: #FB923C; border: 1px solid rgba(234, 88, 12, 0.3); }}
-.badge-impl {{ background: rgba(34, 197, 94, 0.15); color: #4ADE80; border: 1px solid rgba(34, 197, 94, 0.3); }}
-.badge-qa {{ background: rgba(99, 102, 241, 0.15); color: #818CF8; border: 1px solid rgba(99, 102, 241, 0.3); }}
-
-.tech-arch-card-title {{
+.tech-arch-wrapper .badge-source {{ background: rgba(59, 130, 246, 0.15); color: #60A5FA; border: 1px solid rgba(59, 130, 246, 0.3); }}
+.tech-arch-wrapper .badge-extract {{ background: rgba(245, 158, 11, 0.15); color: #FBBF24; border: 1px solid rgba(245, 158, 11, 0.3); }}
+.tech-arch-wrapper .badge-generic {{ background: rgba(168, 85, 247, 0.15); color: #C084FC; border: 1px solid rgba(168, 85, 247, 0.3); }}
+.tech-arch-wrapper .badge-target {{ background: rgba(14, 165, 233, 0.15); color: #38BDF8; border: 1px solid rgba(14, 165, 233, 0.3); }}
+.tech-arch-wrapper .badge-triage {{ background: rgba(234, 88, 12, 0.15); color: #FB923C; border: 1px solid rgba(234, 88, 12, 0.3); }}
+.tech-arch-wrapper .badge-impl {{ background: rgba(34, 197, 94, 0.15); color: #4ADE80; border: 1px solid rgba(34, 197, 94, 0.3); }}
+.tech-arch-wrapper .badge-qa {{ background: rgba(99, 102, 241, 0.15); color: #818CF8; border: 1px solid rgba(99, 102, 241, 0.3); }}
+.tech-arch-wrapper .tech-arch-card-title {{
     font-size: 0.8rem;
     font-weight: 700;
     color: var(--kash-deep, var(--text-color, #FFFFFF));
@@ -7410,7 +7407,7 @@ def render_technical_architecture_flow(analysis_result=None):
     display: flex;
     align-items: center;
 }}
-.tech-arch-item-list {{
+.tech-arch-wrapper .tech-arch-item-list {{
     list-style: none;
     padding: 0;
     margin: 0;
@@ -7418,30 +7415,30 @@ def render_technical_architecture_flow(analysis_result=None):
     color: var(--kash-navy, var(--text-color, #CBD5E1));
     line-height: 1.4;
 }}
-.tech-arch-item-list li {{
+.tech-arch-wrapper .tech-arch-item-list li {{
     padding: 2.5px 0;
     display: flex;
     align-items: flex-start;
     gap: 5px;
     border-bottom: 1px dashed var(--kash-border, rgba(127, 127, 127, 0.1));
 }}
-.tech-arch-item-list li:last-child {{
+.tech-arch-wrapper .tech-arch-item-list li:last-child {{
     border-bottom: none;
 }}
-.tech-bullet {{
+.tech-arch-wrapper .tech-bullet {{
     color: #FF5A1F;
     font-weight: bold;
     font-size: 0.75rem;
     line-height: 1.2;
 }}
-.triage-pills {{
+.tech-arch-wrapper .triage-pills {{
     display: flex;
     flex-direction: column;
     gap: 4px;
     margin-top: 4px;
     width: 100%;
 }}
-.triage-pill {{
+.tech-arch-wrapper .triage-pill, .trace-table-container .triage-pill {{
     display: inline-flex;
     align-items: center;
     justify-content: space-between;
@@ -7451,23 +7448,22 @@ def render_technical_architecture_flow(analysis_result=None):
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-weight: 600;
 }}
-.triage-auto {{ background: rgba(34, 197, 94, 0.15); color: #4ADE80; border: 1px solid rgba(34, 197, 94, 0.3); }}
-.triage-rec {{ background: rgba(245, 158, 11, 0.15); color: #FBBF24; border: 1px solid rgba(245, 158, 11, 0.3); }}
-.triage-man {{ background: rgba(239, 68, 68, 0.15); color: #F87171; border: 1px solid rgba(239, 68, 68, 0.3); }}
-
+.tech-arch-wrapper .triage-auto, .trace-table-container .triage-auto {{ background: rgba(34, 197, 94, 0.15); color: #4ADE80; border: 1px solid rgba(34, 197, 94, 0.3); }}
+.tech-arch-wrapper .triage-rec, .trace-table-container .triage-rec {{ background: rgba(245, 158, 11, 0.15); color: #FBBF24; border: 1px solid rgba(245, 158, 11, 0.3); }}
+.tech-arch-wrapper .triage-man, .trace-table-container .triage-man {{ background: rgba(239, 68, 68, 0.15); color: #F87171; border: 1px solid rgba(239, 68, 68, 0.3); }}
 .trace-table-container {{
     overflow-x: auto;
     margin-top: 10px;
     border: 1px solid var(--kash-border, rgba(127, 127, 127, 0.2));
     border-radius: 8px;
 }}
-.trace-table {{
+.trace-table-container .trace-table {{
     width: 100%;
     border-collapse: collapse;
     font-size: 0.78rem;
     text-align: left;
 }}
-.trace-table th {{
+.trace-table-container .trace-table th {{
     background: rgba(127, 127, 127, 0.1);
     padding: 8px 12px;
     font-weight: 700;
@@ -7476,16 +7472,16 @@ def render_technical_architecture_flow(analysis_result=None):
     white-space: nowrap;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }}
-.trace-table td {{
+.trace-table-container .trace-table td {{
     padding: 8px 12px;
     border-bottom: 1px solid var(--kash-border, rgba(127, 127, 127, 0.12));
     vertical-align: top;
     color: var(--kash-navy, var(--text-color, #CBD5E1));
 }}
-.trace-table tr:hover td {{
+.trace-table-container .trace-table tr:hover td {{
     background: rgba(127, 127, 127, 0.05);
 }}
-.trace-code {{
+.trace-table-container .trace-code {{
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: 0.72rem;
     color: #FF5A1F;
@@ -7495,162 +7491,149 @@ def render_technical_architecture_flow(analysis_result=None):
     border: 1px solid rgba(255, 90, 31, 0.2);
     font-weight: 600;
 }}
-.trace-target {{
+.trace-table-container .trace-target {{
     font-weight: 600;
     color: var(--kash-deep, var(--text-color, #FFFFFF));
 }}
 </style>
-
 <div class="tech-arch-wrapper">
-    <div class="tech-arch-header">
-        <div class="tech-arch-title-area">
-            <h3>⚡ Technical Migration Architecture &amp; Traceability Pipeline</h3>
-            <p class="tech-arch-subtitle">Deterministic transformation lineage: WebFOCUS 4GL AST &rarr; Generic Migration Representation &rarr; Pyramid Analytics Target Stack</p>
-        </div>
-        <div class="tech-arch-meta-badges">
-            <span class="tech-meta-badge">📐 7 Canonical Stages</span>
-            <span class="tech-meta-badge">🎯 3-Tier Modeler Triage</span>
-            {stats_badges}
-        </div>
-    </div>
-
-    <!-- 7-Stage Architecture Flow Grid -->
-    <div class="tech-arch-grid">
-        <!-- Stage 1 -->
-        <div class="tech-arch-card">
-            <div class="tech-arch-card-top">
-                <span class="tech-arch-step-num">STAGE 01 &rarr;</span>
-                <span class="tech-arch-badge badge-source">INGEST</span>
-            </div>
-            <div class="tech-arch-card-title">WebFOCUS FEX</div>
-            <ul class="tech-arch-item-list">
-                <li><span class="tech-bullet">&bull;</span> Sources &amp; Master (.mas)</li>
-                <li><span class="tech-bullet">&bull;</span> TABLE FILE &amp; Verbs</li>
-                <li><span class="tech-bullet">&bull;</span> JOIN &amp; MATCH FILE</li>
-                <li><span class="tech-bullet">&bull;</span> WHERE / IF &amp; &amp;VAR</li>
-                <li><span class="tech-bullet">&bull;</span> DEFINE (Row formulas)</li>
-                <li><span class="tech-bullet">&bull;</span> COMPUTE (Aggregates)</li>
-                <li><span class="tech-bullet">&bull;</span> DECODE &amp; EDIT Lookups</li>
-                <li><span class="tech-bullet">&bull;</span> HOLD / PCHOLD Staging</li>
-            </ul>
-        </div>
-
-        <!-- Stage 2 -->
-        <div class="tech-arch-card">
-            <div class="tech-arch-card-top">
-                <span class="tech-arch-step-num">STAGE 02 &rarr;</span>
-                <span class="tech-arch-badge badge-extract">PARSER AST</span>
-            </div>
-            <div class="tech-arch-card-title">Business Logic Extraction</div>
-            <ul class="tech-arch-item-list">
-                <li><span class="tech-bullet">&bull;</span> Sources (Tables/Views)</li>
-                <li><span class="tech-bullet">&bull;</span> JOIN / MATCH (Keys/Types)</li>
-                <li><span class="tech-bullet">&bull;</span> Filters / Parameters</li>
-                <li><span class="tech-bullet">&bull;</span> DEFINE / COMPUTE</li>
-                <li><span class="tech-bullet">&bull;</span> DECODE (Value dicts)</li>
-                <li><span class="tech-bullet">&bull;</span> Aggregations (SUM, AVE)</li>
-                <li><span class="tech-bullet">&bull;</span> Groupings (BY / ACROSS)</li>
-                <li><span class="tech-bullet">&bull;</span> HOLD / Outputs (Staging)</li>
-            </ul>
-        </div>
-
-        <!-- Stage 3 -->
-        <div class="tech-arch-card">
-            <div class="tech-arch-card-top">
-                <span class="tech-arch-step-num">STAGE 03 &rarr;</span>
-                <span class="tech-arch-badge badge-generic">CANONICAL</span>
-            </div>
-            <div class="tech-arch-card-title">Generic Migration Representation</div>
-            <ul class="tech-arch-item-list">
-                <li><span class="tech-bullet">&bull;</span> Sources (Entities/Types)</li>
-                <li><span class="tech-bullet">&bull;</span> Joins (Unified Graph)</li>
-                <li><span class="tech-bullet">&bull;</span> Filters (Normalized AST)</li>
-                <li><span class="tech-bullet">&bull;</span> Calculations (Agnostic)</li>
-                <li><span class="tech-bullet">&bull;</span> Mappings (Lookup maps)</li>
-                <li><span class="tech-bullet">&bull;</span> Aggregations (Metrics)</li>
-                <li><span class="tech-bullet">&bull;</span> Groupings (Dimensions)</li>
-                <li><span class="tech-bullet">&bull;</span> Parameters (Variables)</li>
-                <li><span class="tech-bullet">&bull;</span> Outputs (Projections)</li>
-            </ul>
-        </div>
-
-        <!-- Stage 4 -->
-        <div class="tech-arch-card">
-            <div class="tech-arch-card-top">
-                <span class="tech-arch-step-num">STAGE 04 &rarr;</span>
-                <span class="tech-arch-badge badge-target">MAPPING</span>
-            </div>
-            <div class="tech-arch-card-title">Pyramid Target Mapping</div>
-            <ul class="tech-arch-item-list">
-                <li><span class="tech-bullet">&bull;</span> Data Source / Model Table</li>
-                <li><span class="tech-bullet">&bull;</span> Data Flow (ETL/Joins/HOLD)</li>
-                <li><span class="tech-bullet">&bull;</span> Semantic Model Schema</li>
-                <li><span class="tech-bullet">&bull;</span> Relationships (1:1, 1:N)</li>
-                <li><span class="tech-bullet">&bull;</span> Calculated Columns</li>
-                <li><span class="tech-bullet">&bull;</span> Formulate / PQL Logic</li>
-                <li><span class="tech-bullet">&bull;</span> Parameters (Model/Slicer)</li>
-                <li><span class="tech-bullet">&bull;</span> Discover / Visuals</li>
-            </ul>
-        </div>
-
-        <!-- Stage 5 -->
-        <div class="tech-arch-card">
-            <div class="tech-arch-card-top">
-                <span class="tech-arch-step-num">STAGE 05 &rarr;</span>
-                <span class="tech-arch-badge badge-triage">TRIAGE</span>
-            </div>
-            <div class="tech-arch-card-title">Structured Modeler Flow</div>
-            <ul class="tech-arch-item-list">
-                <li style="border:none; padding: 2px 0;">
-                    <div class="triage-pills">
-                        <span class="triage-pill triage-auto"><span>&#9679; Automatic</span><span>95%+</span></span>
-                        <span class="triage-pill triage-rec"><span>&#9679; Recommended</span><span>80-90%</span></span>
-                        <span class="triage-pill triage-man"><span>&#9679; Manual Review</span><span>&lt;80%</span></span>
-                    </div>
-                </li>
-                <li><span class="tech-bullet">&bull;</span> Confidence Scoring</li>
-                <li><span class="tech-bullet">&bull;</span> Decision Rationales</li>
-                <li><span class="tech-bullet">&bull;</span> Modeler Build Queue</li>
-            </ul>
-        </div>
-
-        <!-- Stage 6 -->
-        <div class="tech-arch-card">
-            <div class="tech-arch-card-top">
-                <span class="tech-arch-step-num">STAGE 06 &rarr;</span>
-                <span class="tech-arch-badge badge-impl">TARGET ASSETS</span>
-            </div>
-            <div class="tech-arch-card-title">Pyramid Implementation</div>
-            <ul class="tech-arch-item-list">
-                <li><span class="tech-bullet">&bull;</span> Semantic Model (Schema)</li>
-                <li><span class="tech-bullet">&bull;</span> Data Flow (ETL Nodes)</li>
-                <li><span class="tech-bullet">&bull;</span> Calculated Fields (PQL)</li>
-                <li><span class="tech-bullet">&bull;</span> Visuals (Discover Grids)</li>
-                <li><span class="tech-bullet">&bull;</span> Validation (Verification)</li>
-                <li><span class="tech-bullet">&bull;</span> JSON Model Export</li>
-            </ul>
-        </div>
-
-        <!-- Stage 7 -->
-        <div class="tech-arch-card">
-            <div class="tech-arch-card-top">
-                <span class="tech-arch-step-num">STAGE 07</span>
-                <span class="tech-arch-badge badge-qa">QA VERIFY</span>
-            </div>
-            <div class="tech-arch-card-title">Validation</div>
-            <ul class="tech-arch-item-list">
-                <li><span class="tech-bullet">&bull;</span> SQL / Data Validation</li>
-                <li><span class="tech-bullet">&bull;</span> Business Total Validation</li>
-                <li><span class="tech-bullet">&bull;</span> Report Logic Validation</li>
-                <li><span class="tech-bullet">&bull;</span> Interaction Validation</li>
-                <li><span class="tech-bullet">&bull;</span> 16-Point QA Checklist</li>
-                <li><span class="tech-bullet">&bull;</span> Audit Sign-off Ready</li>
-            </ul>
-        </div>
-    </div>
+<div class="tech-arch-header">
+<div class="tech-arch-title-area">
+<h3>⚡ Technical Migration Architecture &amp; Traceability Pipeline</h3>
+<p class="tech-arch-subtitle">Deterministic transformation lineage: WebFOCUS 4GL AST &rarr; Generic Migration Representation &rarr; Pyramid Analytics Target Stack</p>
 </div>
-"""
-    st.markdown(flow_html, unsafe_allow_html=True)
+<div class="tech-arch-meta-badges">
+<span class="tech-meta-badge">📐 7 Canonical Stages</span>
+<span class="tech-meta-badge">🎯 3-Tier Modeler Triage</span>
+{stats_badges}
+</div>
+</div>
+<div class="tech-arch-grid">
+<div class="tech-arch-card">
+<div class="tech-arch-card-top">
+<span class="tech-arch-step-num">STAGE 01 &rarr;</span>
+<span class="tech-arch-badge badge-source">INGEST</span>
+</div>
+<div class="tech-arch-card-title">WebFOCUS FEX</div>
+<ul class="tech-arch-item-list">
+<li><span class="tech-bullet">&bull;</span> Sources &amp; Master (.mas)</li>
+<li><span class="tech-bullet">&bull;</span> TABLE FILE &amp; Verbs</li>
+<li><span class="tech-bullet">&bull;</span> JOIN &amp; MATCH FILE</li>
+<li><span class="tech-bullet">&bull;</span> WHERE / IF &amp; &amp;VAR</li>
+<li><span class="tech-bullet">&bull;</span> DEFINE (Row formulas)</li>
+<li><span class="tech-bullet">&bull;</span> COMPUTE (Aggregates)</li>
+<li><span class="tech-bullet">&bull;</span> DECODE &amp; EDIT Lookups</li>
+<li><span class="tech-bullet">&bull;</span> HOLD / PCHOLD Staging</li>
+</ul>
+</div>
+<div class="tech-arch-card">
+<div class="tech-arch-card-top">
+<span class="tech-arch-step-num">STAGE 02 &rarr;</span>
+<span class="tech-arch-badge badge-extract">PARSER AST</span>
+</div>
+<div class="tech-arch-card-title">Business Logic Extraction</div>
+<ul class="tech-arch-item-list">
+<li><span class="tech-bullet">&bull;</span> Sources (Tables/Views)</li>
+<li><span class="tech-bullet">&bull;</span> JOIN / MATCH (Keys/Types)</li>
+<li><span class="tech-bullet">&bull;</span> Filters / Parameters</li>
+<li><span class="tech-bullet">&bull;</span> DEFINE / COMPUTE</li>
+<li><span class="tech-bullet">&bull;</span> DECODE (Value dicts)</li>
+<li><span class="tech-bullet">&bull;</span> Aggregations (SUM, AVE)</li>
+<li><span class="tech-bullet">&bull;</span> Groupings (BY / ACROSS)</li>
+<li><span class="tech-bullet">&bull;</span> HOLD / Outputs (Staging)</li>
+</ul>
+</div>
+<div class="tech-arch-card">
+<div class="tech-arch-card-top">
+<span class="tech-arch-step-num">STAGE 03 &rarr;</span>
+<span class="tech-arch-badge badge-generic">CANONICAL</span>
+</div>
+<div class="tech-arch-card-title">Generic Migration Representation</div>
+<ul class="tech-arch-item-list">
+<li><span class="tech-bullet">&bull;</span> Sources (Entities/Types)</li>
+<li><span class="tech-bullet">&bull;</span> Joins (Unified Graph)</li>
+<li><span class="tech-bullet">&bull;</span> Filters (Normalized AST)</li>
+<li><span class="tech-bullet">&bull;</span> Calculations (Agnostic)</li>
+<li><span class="tech-bullet">&bull;</span> Mappings (Lookup maps)</li>
+<li><span class="tech-bullet">&bull;</span> Aggregations (Metrics)</li>
+<li><span class="tech-bullet">&bull;</span> Groupings (Dimensions)</li>
+<li><span class="tech-bullet">&bull;</span> Parameters (Variables)</li>
+<li><span class="tech-bullet">&bull;</span> Outputs (Projections)</li>
+</ul>
+</div>
+<div class="tech-arch-card">
+<div class="tech-arch-card-top">
+<span class="tech-arch-step-num">STAGE 04 &rarr;</span>
+<span class="tech-arch-badge badge-target">MAPPING</span>
+</div>
+<div class="tech-arch-card-title">Pyramid Target Mapping</div>
+<ul class="tech-arch-item-list">
+<li><span class="tech-bullet">&bull;</span> Data Source / Model Table</li>
+<li><span class="tech-bullet">&bull;</span> Data Flow (ETL/Joins/HOLD)</li>
+<li><span class="tech-bullet">&bull;</span> Semantic Model Schema</li>
+<li><span class="tech-bullet">&bull;</span> Relationships (1:1, 1:N)</li>
+<li><span class="tech-bullet">&bull;</span> Calculated Columns</li>
+<li><span class="tech-bullet">&bull;</span> Formulate / PQL Logic</li>
+<li><span class="tech-bullet">&bull;</span> Parameters (Model/Slicer)</li>
+<li><span class="tech-bullet">&bull;</span> Discover / Visuals</li>
+</ul>
+</div>
+<div class="tech-arch-card">
+<div class="tech-arch-card-top">
+<span class="tech-arch-step-num">STAGE 05 &rarr;</span>
+<span class="tech-arch-badge badge-triage">TRIAGE</span>
+</div>
+<div class="tech-arch-card-title">Structured Modeler Flow</div>
+<ul class="tech-arch-item-list">
+<li style="border:none; padding: 2px 0;">
+<div class="triage-pills">
+<span class="triage-pill triage-auto"><span>&#9679; Automatic</span><span>95%+</span></span>
+<span class="triage-pill triage-rec"><span>&#9679; Recommended</span><span>80-90%</span></span>
+<span class="triage-pill triage-man"><span>&#9679; Manual Review</span><span>&lt;80%</span></span>
+</div>
+</li>
+<li><span class="tech-bullet">&bull;</span> Confidence Scoring</li>
+<li><span class="tech-bullet">&bull;</span> Decision Rationales</li>
+<li><span class="tech-bullet">&bull;</span> Modeler Build Queue</li>
+</ul>
+</div>
+<div class="tech-arch-card">
+<div class="tech-arch-card-top">
+<span class="tech-arch-step-num">STAGE 06 &rarr;</span>
+<span class="tech-arch-badge badge-impl">TARGET ASSETS</span>
+</div>
+<div class="tech-arch-card-title">Pyramid Implementation</div>
+<ul class="tech-arch-item-list">
+<li><span class="tech-bullet">&bull;</span> Semantic Model (Schema)</li>
+<li><span class="tech-bullet">&bull;</span> Data Flow (ETL Nodes)</li>
+<li><span class="tech-bullet">&bull;</span> Calculated Fields (PQL)</li>
+<li><span class="tech-bullet">&bull;</span> Visuals (Discover Grids)</li>
+<li><span class="tech-bullet">&bull;</span> Validation (Verification)</li>
+<li><span class="tech-bullet">&bull;</span> JSON Model Export</li>
+</ul>
+</div>
+<div class="tech-arch-card">
+<div class="tech-arch-card-top">
+<span class="tech-arch-step-num">STAGE 07</span>
+<span class="tech-arch-badge badge-qa">QA VERIFY</span>
+</div>
+<div class="tech-arch-card-title">Validation</div>
+<ul class="tech-arch-item-list">
+<li><span class="tech-bullet">&bull;</span> SQL / Data Validation</li>
+<li><span class="tech-bullet">&bull;</span> Business Total Validation</li>
+<li><span class="tech-bullet">&bull;</span> Report Logic Validation</li>
+<li><span class="tech-bullet">&bull;</span> Interaction Validation</li>
+<li><span class="tech-bullet">&bull;</span> 16-Point QA Checklist</li>
+<li><span class="tech-bullet">&bull;</span> Audit Sign-off Ready</li>
+</ul>
+</div>
+</div>
+</div>"""
+
+    if hasattr(st, "html"):
+        st.html(flow_html)
+    else:
+        st.markdown(flow_html, unsafe_allow_html=True)
 
     with st.expander("🔬 Traceability Matrix: Concrete Transformation Lineage (WebFOCUS → Generic AST → Pyramid Target)", expanded=False):
         st.caption("Detailed transformation trace mapping specific WebFOCUS 4GL constructs to their extracted representation, canonical AST, Pyramid mapping, review classification, and final target artifact.")
@@ -7730,40 +7713,40 @@ def render_technical_architecture_flow(analysis_result=None):
 
         table_rows_html = []
         for r in traceability_rows:
-            table_rows_html.append(f"""
-            <tr>
-                <td>
-                    <span class="trace-code">{r['construct']}</span>
-                    <div style="font-size: 0.68rem; color: var(--kash-muted, #94A3B8); margin-top: 3px; font-family: monospace;">{r['example']}</div>
-                </td>
-                <td>{r['extracted']}</td>
-                <td><code>{r['generic']}</code></td>
-                <td><strong>{r['mapping']}</strong></td>
-                <td><span class="triage-pill {r['triage_class']}">{r['triage_text']}</span></td>
-                <td><span class="trace-target">{r['target']}</span></td>
-            </tr>
-            """)
+            table_rows_html.append(f"""<tr>
+<td>
+<span class="trace-code">{r['construct']}</span>
+<div style="font-size: 0.68rem; color: var(--kash-muted, #94A3B8); margin-top: 3px; font-family: monospace;">{r['example']}</div>
+</td>
+<td>{r['extracted']}</td>
+<td><code>{r['generic']}</code></td>
+<td><strong>{r['mapping']}</strong></td>
+<td><span class="triage-pill {r['triage_class']}">{r['triage_text']}</span></td>
+<td><span class="trace-target">{r['target']}</span></td>
+</tr>""")
 
-        table_html = f"""
-        <div class="trace-table-container">
-            <table class="trace-table">
-                <thead>
-                    <tr>
-                        <th style="width: 22%;">WebFOCUS Construct</th>
-                        <th style="width: 18%;">Extracted Logic</th>
-                        <th style="width: 18%;">Generic Representation</th>
-                        <th style="width: 16%;">Pyramid Mapping</th>
-                        <th style="width: 12%;">Review Level</th>
-                        <th style="width: 14%;">Final Pyramid Asset</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {''.join(table_rows_html)}
-                </tbody>
-            </table>
-        </div>
-        """
-        st.markdown(table_html, unsafe_allow_html=True)
+        table_html = f"""<div class="trace-table-container">
+<table class="trace-table">
+<thead>
+<tr>
+<th style="width: 22%;">WebFOCUS Construct</th>
+<th style="width: 18%;">Extracted Logic</th>
+<th style="width: 18%;">Generic Representation</th>
+<th style="width: 16%;">Pyramid Mapping</th>
+<th style="width: 12%;">Review Level</th>
+<th style="width: 14%;">Final Pyramid Asset</th>
+</tr>
+</thead>
+<tbody>
+{''.join(table_rows_html)}
+</tbody>
+</table>
+</div>"""
+
+        if hasattr(st, "html"):
+            st.html(table_html)
+        else:
+            st.markdown(table_html, unsafe_allow_html=True)
 
 
 if submit:
