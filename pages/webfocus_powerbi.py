@@ -1,3 +1,8 @@
+"""
+WebFOCUS to Power BI Migration Page.
+Exclusively processes WebFOCUS .fex procedures, metadata ZIP (.mas/.acx), and Resource Analyzer files.
+For IBM Cognos XML reports, use pages/cognos_powerbi.py.
+"""
 import sys
 from pathlib import Path
 import runpy

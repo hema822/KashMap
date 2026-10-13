@@ -1,0 +1,13 @@
+{
+	"mcpServers": {
+		"powerbi-authoring-local": {
+			"type": "stdio",
+			"command": "C:\\Users\\jegan\\AppData\\Local\\npm-cache\\_npx\\deea81b821a9ed55\\node_modules\\@microsoft\\powerbi-modeling-mcp-win32-x64\\dist\\powerbi-modeling-mcp.exe",
+			"args": [
+				"--start",
+				"--accept-eula"
+			],
+			"env": {}
+		}
+	}
+}

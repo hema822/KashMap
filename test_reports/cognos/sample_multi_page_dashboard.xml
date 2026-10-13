@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<report xmlns="http://developer.cognos.com/schemas/report/15.5/">
+  <reportName>Multi-Page Executive Sales Dashboard</reportName>
+  <modelPath>/content/package[@name='GO Sales (query)']/model[@name='model']</modelPath>
+  <queries>
+    <query name="SalesSummaryQuery">
+      <source>
+        <model/>
+      </source>
+      <selection>
+        <dataItem name="Region" aggregate="none">
+          <expression>[Sales].[Branch].[Region]</expression>
+        </dataItem>
+        <dataItem name="Product_Line" aggregate="none">
+          <expression>[Sales].[Products].[Product_Line]</expression>
+        </dataItem>
+        <dataItem name="Revenue" aggregate="total">
+          <expression>[Sales].[Sales].[Revenue]</expression>
+        </dataItem>
+        <dataItem name="Target_Revenue" aggregate="total">
+          <expression>[Sales].[Sales].[Target_Revenue]</expression>
+        </dataItem>
+        <dataItem name="Units_Sold" aggregate="total">
+          <expression>[Sales].[Sales].[Quantity]</expression>
+        </dataItem>
+        <dataItem name="Gross_Margin_Pct" aggregate="calculated">
+          <expression>([Revenue] - coalesce([Sales].[Sales].[Product_Cost], 0)) / nullif([Revenue], 0)</expression>
+        </dataItem>
+      </selection>
+      <detailFilters>
+        <detailFilter>
+          <filterExpression>[Sales].[Sales].[Revenue] &gt; 5000</filterExpression>
+        </detailFilter>
+        <detailFilter>
+          <filterExpression>[Region] in (?pRegion?)</filterExpression>
+        </detailFilter>
+      </detailFilters>
+    </query>
+  </queries>
+  <layouts>
+    <layout>
+      <reportPages>
+        <page name="ExecutiveOverview">
+          <pageBody>
+            <contents>
+              <selectValue parameter="pRegion" refQuery="SalesSummaryQuery" multiSelect="true">
+                <selectOption useValue="Americas"/>
+                <selectOption useValue="EMEA"/>
+                <selectOption useValue="APAC"/>
+              </selectValue>
+              <combinationChart name="RegionalRevenueChart" refQuery="SalesSummaryQuery">
+                <commonAxis>
+                  <chartNodeMembers>
+                    <chartNodeMember refDataItem="Region"/>
+                  </chartNodeMembers>
+                </commonAxis>
+                <seriesMembers>
+                  <chartNodeMember refDataItem="Product_Line"/>
+                </seriesMembers>
+                <measureMembers>
+                  <chartNodeMember refDataItem="Revenue"/>
+                  <chartNodeMember refDataItem="Target_Revenue"/>
+                </measureMembers>
+              </combinationChart>
+              <list name="TopPerformersList" refQuery="SalesSummaryQuery">
+                <listColumns>
+                  <listColumn>
+                    <listColumnTitle><contents><textItem><text>Region</text></textItem></contents></listColumnTitle>
+                    <listColumnBody><contents><textItem><text>[Region]</text></textItem></contents></listColumnBody>
+                  </listColumn>
+                  <listColumn>
+                    <listColumnTitle><contents><textItem><text>Product Line</text></textItem></contents></listColumnTitle>
+                    <listColumnBody><contents><textItem><text>[Product_Line]</text></textItem></contents></listColumnBody>
+                  </listColumn>
+                  <listColumn>
+                    <listColumnTitle><contents><textItem><text>Revenue</text></textItem></contents></listColumnTitle>
+                    <listColumnBody><contents><textItem><text>[Revenue]</text></textItem></contents></listColumnBody>
+                  </listColumn>
+                  <listColumn>
+                    <listColumnTitle><contents><textItem><text>Gross Margin %</text></textItem></contents></listColumnTitle>
+                    <listColumnBody><contents><textItem><text>[Gross_Margin_Pct]</text></textItem></contents></listColumnBody>
+                  </listColumn>
+                </listColumns>
+              </list>
+            </contents>
+          </pageBody>
+        </page>
+        <page name="RegionalDeepDive">
+          <pageBody>
+            <contents>
+              <crosstab name="ProductRegionMatrix" refQuery="SalesSummaryQuery">
+                <crosstabRows>
+                  <crosstabNodeMember refDataItem="Region"/>
+                </crosstabRows>
+                <crosstabColumns>
+                  <crosstabNodeMember refDataItem="Product_Line"/>
+                </crosstabColumns>
+                <crosstabIntersection refDataItem="Revenue"/>
+              </crosstab>
+              <customControl name="AdvancedGeoMapWidget" path="/controls/geo/map.js">
+                <description>Custom D3 Geographic Heatmap</description>
+              </customControl>
+            </contents>
+          </pageBody>
+        </page>
+      </reportPages>
+    </layout>
+  </layouts>
+</report>

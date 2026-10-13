@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<report xmlns="http://developer.cognos.com/schemas/report/15.5/">
+  <reportName>Complex Financial Consolidation</reportName>
+  <modelPath>/content/package[@name='GO Finance (query)']/model[@name='model']</modelPath>
+  <queries>
+    <query name="GLQuery">
+      <source>
+        <join>
+          <joinLeft>
+            <queryRef refQuery="Query_Actuals"/>
+          </joinLeft>
+          <joinRight>
+            <queryRef refQuery="Query_Budgets"/>
+          </joinRight>
+          <joinCriteria>
+            <criteria>[Query_Actuals].[Account_ID] = [Query_Budgets].[Account_ID]</criteria>
+          </joinCriteria>
+        </join>
+      </source>
+      <selection>
+        <dataItem name="Account_ID" aggregate="none">
+          <expression>[Finance].[GL].[Account_ID]</expression>
+        </dataItem>
+        <dataItem name="Department" aggregate="none">
+          <expression>[Finance].[GL].[Department]</expression>
+        </dataItem>
+        <dataItem name="Actual_Amount" aggregate="total">
+          <expression>[Finance].[GL].[Actual_Amount]</expression>
+        </dataItem>
+        <dataItem name="Budget_Amount" aggregate="total">
+          <expression>[Finance].[GL].[Budget_Amount]</expression>
+        </dataItem>
+        <dataItem name="Variance_Category" aggregate="calculated">
+          <expression>if ([Actual_Amount] &gt; [Budget_Amount] * 1.2) then ('Severe Over') else if ([Actual_Amount] &gt; [Budget_Amount]) then ('Over') else ('Under')</expression>
+        </dataItem>
+        <dataItem name="Scoped_Rollup" aggregate="calculated">
+          <expression>total([Actual_Amount] for [Department])</expression>
+        </dataItem>
+        <dataItem name="MDX_Dimensional_Tuple" aggregate="calculated">
+          <expression>tuple([Finance].[GL].[Actual_Amount], ancestor([Finance].[Org].[Department], 1))</expression>
+        </dataItem>
+        <dataItem name="Date_Offset" aggregate="calculated">
+          <expression>_add_days(current_date, -30)</expression>
+        </dataItem>
+      </selection>
+      <detailFilters>
+        <detailFilter>
+          <filterExpression>[Department] in ('Finance', 'Operations')</filterExpression>
+        </detailFilter>
+        <detailFilter>
+          <filterExpression>[Account_ID] = ?pAccount?</filterExpression>
+        </detailFilter>
+      </detailFilters>
+      <slicer>
+        <slicerExpression>[Finance].[Calendar].[Year] = 2024</slicerExpression>
+      </slicer>
+    </query>
+    <query name="NativeSQLQuery">
+      <source>
+        <sql type="cognos" dataSource="CorporateDW">
+          SELECT Acct, Sum(Val) AS Tot FROM DW_LEDGER GROUP BY Acct
+        </sql>
+      </source>
+      <selection>
+        <dataItem name="Acct" aggregate="none">
+          <expression>[Acct]</expression>
+        </dataItem>
+        <dataItem name="Tot" aggregate="total">
+          <expression>[Tot]</expression>
+        </dataItem>
+      </selection>
+    </query>
+  </queries>
+  <layouts>
+    <layout>
+      <reportPages>
+        <page name="FinancePage">
+          <pageBody>
+            <contents>
+              <crosstab name="Finance_Matrix" refQuery="GLQuery">
+                <crosstabRows>
+                  <crosstabNodeMember refDataItem="Department"/>
+                </crosstabRows>
+                <crosstabColumns>
+                  <crosstabNodeMember refDataItem="Variance_Category"/>
+                </crosstabColumns>
+                <crosstabIntersection refDataItem="Actual_Amount"/>
+              </crosstab>
+              <repeaterTable name="Dept_Multiples" refQuery="GLQuery">
+                <repeaterTableCell>
+                  <contents>
+                    <textItem><text>[Department]</text></textItem>
+                  </contents>
+                </repeaterTableCell>
+              </repeaterTable>
+              <customControl name="InteractiveForecastWidget" path="/js/cognos/forecast_d3.js">
+                <description>D3.js dynamic projection widget</description>
+              </customControl>
+            </contents>
+          </pageBody>
+        </page>
+      </reportPages>
+    </layout>
+  </layouts>
+</report>

@@ -1,0 +1,966 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Report MustUnderstand="df" xmlns="http://schemas.microsoft.com/sqlserver/reporting/2016/01/reportdefinition" xmlns:rd="http://schemas.microsoft.com/SQLServer/reporting/reportdesigner" xmlns:cl="http://schemas.microsoft.com/sqlserver/reporting/2010/01/componentdefinition" xmlns:df="http://schemas.microsoft.com/sqlserver/reporting/2016/01/reportdefinition/defaultfontfamily" xmlns:am="http://schemas.microsoft.com/sqlserver/reporting/authoringmetadata">
+  <rd:ReportUnitType>Inch</rd:ReportUnitType>
+  <rd:ReportID>4855108e-a119-4d5f-8fc9-e1cff4fd906f</rd:ReportID>
+  <am:AuthoringMetadata>
+    <am:CreatedBy>
+      <am:Name>WebAuthoring</am:Name>
+      <am:Version>2025.4.3.1811</am:Version>
+    </am:CreatedBy>
+    <am:UpdatedBy>
+      <am:Name>PBIRB</am:Name>
+      <am:Version>15.7.1814.616</am:Version>
+    </am:UpdatedBy>
+    <am:LastModifiedTimestamp>2025-05-01T15:01:13.7282143Z</am:LastModifiedTimestamp>
+  </am:AuthoringMetadata>
+  <df:DefaultFontFamily>Segoe UI</df:DefaultFontFamily>
+  <AutoRefresh>0</AutoRefresh>
+  <DataSources>
+    <DataSource Name="Inventory">
+      <rd:SecurityType>None</rd:SecurityType>
+      <ConnectionProperties>
+        <DataProvider>PBIDATASET</DataProvider>
+        <ConnectString>Data Source=pbiazure://api.powerbi.com/;Identity Provider="https://login.microsoftonline.com/common, https://analysis.windows.net/powerbi/api, f0b72488-7082-488a-a7e8-eada97bd842d";Initial Catalog=sobe_wowvirtualserver-26000bd3-6cb5-444a-b8bd-89c0262b95ca;Integrated Security=ClaimsToken</ConnectString>
+      </ConnectionProperties>
+      <rd:DataSourceID>590332de-f7d0-44c6-885d-f2858fb81350</rd:DataSourceID>
+    </DataSource>
+  </DataSources>
+  <DataSets>
+    <DataSet Name="DataSet1">
+      <Query>
+        <DataSourceName>Inventory</DataSourceName>
+        <CommandText>DEFINE VAR __DS0Core = 
+	SUMMARIZECOLUMNS(
+		ROLLUPADDISSUBTOTAL(
+			ROLLUPGROUP(
+				'Items_Inventory_ByLocation'[Warehouse],
+				'vw_itemDetails'[ITEM NUMBER],
+				'vw_itemDetails'[Description],
+				'Items_Inventory_ByLocation'[Lot],
+				'Items_Inventory_ByLocation'[PRINT_FLAG],
+				'Items_Inventory_ByLocation'[Order],
+				'Items_Inventory_ByLocation'[Today],
+				'Items_Inventory_ByLocation'[ReportType]
+			), "IsGrandTotalRowTotal"
+		),
+		"SumNetSuite", CALCULATE(SUM('Items_Inventory_ByLocation'[NetSuite])),
+		"SumDSI", CALCULATE(SUM('Items_Inventory_ByLocation'[DSI])),
+		"SumDifference", CALCULATE(SUM('Items_Inventory_ByLocation'[Difference]))
+	)
+
+EVALUATE
+	__DS0Core
+
+ORDER BY
+	[IsGrandTotalRowTotal] DESC,
+	'Items_Inventory_ByLocation'[Warehouse],
+	'vw_itemDetails'[ITEM NUMBER],
+	'vw_itemDetails'[Description],
+	'Items_Inventory_ByLocation'[Lot],
+	'Items_Inventory_ByLocation'[PRINT_FLAG],
+	'Items_Inventory_ByLocation'[Order],
+	'Items_Inventory_ByLocation'[Today],
+	'Items_Inventory_ByLocation'[ReportType]</CommandText>
+      </Query>
+      <Fields>
+        <Field Name="Items_5f_Inventory_5f_ByLocation_Warehouse">
+          <DataField>Items_Inventory_ByLocation[Warehouse]</DataField>
+          <AggregateIndicatorField xmlns="http://schemas.microsoft.com/sqlserver/reporting/2011/01/reportdefinition">x_5b_IsGrandTotalRowTotal_5d_</AggregateIndicatorField>
+        </Field>
+        <Field Name="vw_5f_itemDetails_ITEM_20_NUMBER">
+          <DataField>vw_itemDetails[ITEM NUMBER]</DataField>
+          <AggregateIndicatorField xmlns="http://schemas.microsoft.com/sqlserver/reporting/2011/01/reportdefinition">x_5b_IsGrandTotalRowTotal_5d_</AggregateIndicatorField>
+        </Field>
+        <Field Name="vw_5f_itemDetails_Description">
+          <DataField>vw_itemDetails[Description]</DataField>
+          <AggregateIndicatorField xmlns="http://schemas.microsoft.com/sqlserver/reporting/2011/01/reportdefinition">x_5b_IsGrandTotalRowTotal_5d_</AggregateIndicatorField>
+        </Field>
+        <Field Name="Items_5f_Inventory_5f_ByLocation_Lot">
+          <DataField>Items_Inventory_ByLocation[Lot]</DataField>
+          <AggregateIndicatorField xmlns="http://schemas.microsoft.com/sqlserver/reporting/2011/01/reportdefinition">x_5b_IsGrandTotalRowTotal_5d_</AggregateIndicatorField>
+        </Field>
+        <Field Name="Items_5f_Inventory_5f_ByLocation_NetSuite">
+          <DataField>[SumNetSuite]</DataField>
+        </Field>
+        <Field Name="Items_5f_Inventory_5f_ByLocation_DSI">
+          <DataField>[SumDSI]</DataField>
+        </Field>
+        <Field Name="Items_5f_Inventory_5f_ByLocation_PRINT_5f_FLAG">
+          <DataField>Items_Inventory_ByLocation[PRINT_FLAG]</DataField>
+          <AggregateIndicatorField xmlns="http://schemas.microsoft.com/sqlserver/reporting/2011/01/reportdefinition">x_5b_IsGrandTotalRowTotal_5d_</AggregateIndicatorField>
+        </Field>
+        <Field Name="Items_5f_Inventory_5f_ByLocation_Order">
+          <DataField>Items_Inventory_ByLocation[Order]</DataField>
+          <AggregateIndicatorField xmlns="http://schemas.microsoft.com/sqlserver/reporting/2011/01/reportdefinition">x_5b_IsGrandTotalRowTotal_5d_</AggregateIndicatorField>
+        </Field>
+        <Field Name="Items_5f_Inventory_5f_ByLocation_Today">
+          <DataField>Items_Inventory_ByLocation[Today]</DataField>
+          <AggregateIndicatorField xmlns="http://schemas.microsoft.com/sqlserver/reporting/2011/01/reportdefinition">x_5b_IsGrandTotalRowTotal_5d_</AggregateIndicatorField>
+        </Field>
+        <Field Name="Items_5f_Inventory_5f_ByLocation_ReportType">
+          <DataField>Items_Inventory_ByLocation[ReportType]</DataField>
+          <AggregateIndicatorField xmlns="http://schemas.microsoft.com/sqlserver/reporting/2011/01/reportdefinition">x_5b_IsGrandTotalRowTotal_5d_</AggregateIndicatorField>
+        </Field>
+        <Field Name="Items_5f_Inventory_5f_ByLocation_Difference">
+          <DataField>[SumDifference]</DataField>
+        </Field>
+        <Field Name="x_5b_IsGrandTotalRowTotal_5d_">
+          <DataField>[IsGrandTotalRowTotal]</DataField>
+        </Field>
+      </Fields>
+      <Filters>
+        <Filter>
+          <FilterExpression>=Fields!Items_5f_Inventory_5f_ByLocation_ReportType.Value</FilterExpression>
+          <Operator>In</Operator>
+          <FilterValues>
+            <FilterValue>=Parameters!ReportTypeParm.Value</FilterValue>
+          </FilterValues>
+        </Filter>
+      </Filters>
+      <InterpretSubtotalsAsDetails>False</InterpretSubtotalsAsDetails>
+    </DataSet>
+    <DataSet Name="ReportTypeList">
+      <Query>
+        <DataSourceName>Inventory</DataSourceName>
+        <CommandText>EVALUATE
+SUMMARIZECOLUMNS('Items_Inventory_ByLocation'[ReportType])
+</CommandText>
+      </Query>
+      <Fields>
+        <Field Name="Items_Inventory_ByLocation_ReportType_">
+          <rd:TypeName>System.String</rd:TypeName>
+          <DataField>Items_Inventory_ByLocation[ReportType]</DataField>
+        </Field>
+      </Fields>
+    </DataSet>
+  </DataSets>
+  <ReportSections>
+    <ReportSection>
+      <Body>
+        <ReportItems>
+          <Tablix Name="Tablix1">
+            <TablixBody>
+              <TablixColumns>
+                <TablixColumn>
+                  <Width>58.38472mm</Width>
+                </TablixColumn>
+                <TablixColumn>
+                  <Width>57.50278mm</Width>
+                </TablixColumn>
+                <TablixColumn>
+                  <Width>92.25138mm</Width>
+                </TablixColumn>
+                <TablixColumn>
+                  <Width>33.3375mm</Width>
+                </TablixColumn>
+                <TablixColumn>
+                  <Width>47.625mm</Width>
+                </TablixColumn>
+                <TablixColumn>
+                  <Width>31.04444mm</Width>
+                </TablixColumn>
+                <TablixColumn>
+                  <Width>43.56806mm</Width>
+                </TablixColumn>
+              </TablixColumns>
+              <TablixRows>
+                <TablixRow>
+                  <Height>9.525mm</Height>
+                  <TablixCells>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox1">
+                          <rd:DefaultName>Textbox1</rd:DefaultName>
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>Warehouse</Value>
+                                  <Style>
+                                    <FontFamily>Calibri</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                    <FontWeight>Bold</FontWeight>
+                                    <Color>White</Color>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style>
+                                <TextAlign>Center</TextAlign>
+                              </Style>
+                            </Paragraph>
+                          </Paragraphs>
+                          <Style>
+                            <Border>
+                              <Style>Solid</Style>
+                            </Border>
+                            <BottomBorder>
+                              <Width>=Variables!Style_GridHorizontalWeight.Value</Width>
+                            </BottomBorder>
+                            <LeftBorder>
+                              <Width>=Variables!Style_GridVerticalWeight.Value</Width>
+                            </LeftBorder>
+                            <BackgroundColor>Maroon</BackgroundColor>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>5pt</PaddingRight>
+                            <PaddingTop>=Variables!Style_RowPadding.Value</PaddingTop>
+                            <PaddingBottom>=Variables!Style_RowPadding.Value</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox2">
+                          <rd:DefaultName>Textbox2</rd:DefaultName>
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>Item</Value>
+                                  <Style>
+                                    <FontFamily>Calibri</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                    <FontWeight>Bold</FontWeight>
+                                    <Color>White</Color>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style>
+                                <TextAlign>Center</TextAlign>
+                              </Style>
+                            </Paragraph>
+                          </Paragraphs>
+                          <Style>
+                            <Border>
+                              <Style>Solid</Style>
+                            </Border>
+                            <BottomBorder>
+                              <Width>=Variables!Style_GridHorizontalWeight.Value</Width>
+                            </BottomBorder>
+                            <LeftBorder>
+                              <Width>=Variables!Style_GridVerticalWeight.Value</Width>
+                            </LeftBorder>
+                            <BackgroundColor>Maroon</BackgroundColor>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>5pt</PaddingRight>
+                            <PaddingTop>=Variables!Style_RowPadding.Value</PaddingTop>
+                            <PaddingBottom>=Variables!Style_RowPadding.Value</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox3">
+                          <rd:DefaultName>Textbox3</rd:DefaultName>
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>Description</Value>
+                                  <Style>
+                                    <FontFamily>Calibri</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                    <FontWeight>Bold</FontWeight>
+                                    <Color>White</Color>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style>
+                                <TextAlign>Center</TextAlign>
+                              </Style>
+                            </Paragraph>
+                          </Paragraphs>
+                          <Style>
+                            <Border>
+                              <Style>Solid</Style>
+                            </Border>
+                            <BottomBorder>
+                              <Width>=Variables!Style_GridHorizontalWeight.Value</Width>
+                            </BottomBorder>
+                            <LeftBorder>
+                              <Width>=Variables!Style_GridVerticalWeight.Value</Width>
+                            </LeftBorder>
+                            <BackgroundColor>Maroon</BackgroundColor>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>5pt</PaddingRight>
+                            <PaddingTop>=Variables!Style_RowPadding.Value</PaddingTop>
+                            <PaddingBottom>=Variables!Style_RowPadding.Value</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox4">
+                          <rd:DefaultName>Textbox4</rd:DefaultName>
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>Lot</Value>
+                                  <Style>
+                                    <FontFamily>Calibri</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                    <FontWeight>Bold</FontWeight>
+                                    <Color>White</Color>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style>
+                                <TextAlign>Center</TextAlign>
+                              </Style>
+                            </Paragraph>
+                          </Paragraphs>
+                          <Style>
+                            <Border>
+                              <Style>Solid</Style>
+                            </Border>
+                            <BottomBorder>
+                              <Width>=Variables!Style_GridHorizontalWeight.Value</Width>
+                            </BottomBorder>
+                            <LeftBorder>
+                              <Width>=Variables!Style_GridVerticalWeight.Value</Width>
+                            </LeftBorder>
+                            <BackgroundColor>Maroon</BackgroundColor>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>5pt</PaddingRight>
+                            <PaddingTop>=Variables!Style_RowPadding.Value</PaddingTop>
+                            <PaddingBottom>=Variables!Style_RowPadding.Value</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox5">
+                          <rd:DefaultName>Textbox5</rd:DefaultName>
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>Netsuite</Value>
+                                  <Style>
+                                    <FontFamily>Calibri</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                    <FontWeight>Bold</FontWeight>
+                                    <Color>White</Color>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style>
+                                <TextAlign>Center</TextAlign>
+                              </Style>
+                            </Paragraph>
+                          </Paragraphs>
+                          <Style>
+                            <Border>
+                              <Style>Solid</Style>
+                            </Border>
+                            <BottomBorder>
+                              <Width>=Variables!Style_GridHorizontalWeight.Value</Width>
+                            </BottomBorder>
+                            <LeftBorder>
+                              <Width>=Variables!Style_GridVerticalWeight.Value</Width>
+                            </LeftBorder>
+                            <BackgroundColor>Maroon</BackgroundColor>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>5pt</PaddingRight>
+                            <PaddingTop>=Variables!Style_RowPadding.Value</PaddingTop>
+                            <PaddingBottom>=Variables!Style_RowPadding.Value</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox6">
+                          <rd:DefaultName>Textbox6</rd:DefaultName>
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>DSI</Value>
+                                  <Style>
+                                    <FontFamily>Calibri</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                    <FontWeight>Bold</FontWeight>
+                                    <Color>White</Color>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style>
+                                <TextAlign>Center</TextAlign>
+                              </Style>
+                            </Paragraph>
+                          </Paragraphs>
+                          <Style>
+                            <Border>
+                              <Style>Solid</Style>
+                            </Border>
+                            <BottomBorder>
+                              <Width>=Variables!Style_GridHorizontalWeight.Value</Width>
+                            </BottomBorder>
+                            <LeftBorder>
+                              <Width>=Variables!Style_GridVerticalWeight.Value</Width>
+                            </LeftBorder>
+                            <BackgroundColor>Maroon</BackgroundColor>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>5pt</PaddingRight>
+                            <PaddingTop>=Variables!Style_RowPadding.Value</PaddingTop>
+                            <PaddingBottom>=Variables!Style_RowPadding.Value</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox11">
+                          <rd:DefaultName>Textbox11</rd:DefaultName>
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>Difference</Value>
+                                  <Style>
+                                    <FontFamily>Calibri</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                    <FontWeight>Bold</FontWeight>
+                                    <Color>White</Color>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style>
+                                <TextAlign>Center</TextAlign>
+                              </Style>
+                            </Paragraph>
+                          </Paragraphs>
+                          <Style>
+                            <Border>
+                              <Style>Solid</Style>
+                            </Border>
+                            <BottomBorder>
+                              <Width>=Variables!Style_GridHorizontalWeight.Value</Width>
+                            </BottomBorder>
+                            <LeftBorder>
+                              <Width>=Variables!Style_GridVerticalWeight.Value</Width>
+                            </LeftBorder>
+                            <BackgroundColor>Maroon</BackgroundColor>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>5pt</PaddingRight>
+                            <PaddingTop>=Variables!Style_RowPadding.Value</PaddingTop>
+                            <PaddingBottom>=Variables!Style_RowPadding.Value</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                  </TablixCells>
+                </TablixRow>
+                <TablixRow>
+                  <Height>6.35mm</Height>
+                  <TablixCells>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox7659ba59c9444ff78fd5e5a2814a732f">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>=Fields!Items_5f_Inventory_5f_ByLocation_Warehouse.Value</Value>
+                                  <Style>
+                                    <Color>=If(RowNumber(Nothing) Mod 2 &lt;&gt; 0, Variables!Style_FontColorValues1.Value, Variables!Style_FontColorValues2.Value)</Color>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <DataElementName>Items_Inventory_ByLocation_Warehouse</DataElementName>
+                          <Style>
+                            <Border>
+                              <Style>Solid</Style>
+                            </Border>
+                            <BottomBorder>
+                              <Width>=Variables!Style_GridHorizontalWeight.Value</Width>
+                            </BottomBorder>
+                            <LeftBorder>
+                              <Width>=Variables!Style_GridVerticalWeight.Value</Width>
+                            </LeftBorder>
+                            <BackgroundColor>=IIF(RowNumber(Nothing) Mod 2 = 0, "Gainsboro", "White")</BackgroundColor>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>5pt</PaddingRight>
+                            <PaddingTop>=Variables!Style_RowPadding.Value</PaddingTop>
+                            <PaddingBottom>=Variables!Style_RowPadding.Value</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox795e6939f4f048c2844151099cd7ca07">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>=Fields!vw_5f_itemDetails_ITEM_20_NUMBER.Value</Value>
+                                  <Style>
+                                    <Color>=If(RowNumber(Nothing) Mod 2 &lt;&gt; 0, Variables!Style_FontColorValues1.Value, Variables!Style_FontColorValues2.Value)</Color>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <DataElementName>vw_itemDetails_ITEM_NUMBER</DataElementName>
+                          <Style>
+                            <Border>
+                              <Style>Solid</Style>
+                            </Border>
+                            <BottomBorder>
+                              <Width>=Variables!Style_GridHorizontalWeight.Value</Width>
+                            </BottomBorder>
+                            <LeftBorder>
+                              <Width>=Variables!Style_GridVerticalWeight.Value</Width>
+                            </LeftBorder>
+                            <BackgroundColor>=IIF(RowNumber(Nothing) Mod 2 = 0, "Gainsboro", "White")</BackgroundColor>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>5pt</PaddingRight>
+                            <PaddingTop>=Variables!Style_RowPadding.Value</PaddingTop>
+                            <PaddingBottom>=Variables!Style_RowPadding.Value</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox7a0e98be9f7e48d4997d9156f9b0db38">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>=Fields!vw_5f_itemDetails_Description.Value</Value>
+                                  <Style>
+                                    <Color>=If(RowNumber(Nothing) Mod 2 &lt;&gt; 0, Variables!Style_FontColorValues1.Value, Variables!Style_FontColorValues2.Value)</Color>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <DataElementName>vw_itemDetails_Description</DataElementName>
+                          <Style>
+                            <Border>
+                              <Style>Solid</Style>
+                            </Border>
+                            <BottomBorder>
+                              <Width>=Variables!Style_GridHorizontalWeight.Value</Width>
+                            </BottomBorder>
+                            <LeftBorder>
+                              <Width>=Variables!Style_GridVerticalWeight.Value</Width>
+                            </LeftBorder>
+                            <BackgroundColor>=IIF(RowNumber(Nothing) Mod 2 = 0, "Gainsboro", "White")</BackgroundColor>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>5pt</PaddingRight>
+                            <PaddingTop>=Variables!Style_RowPadding.Value</PaddingTop>
+                            <PaddingBottom>=Variables!Style_RowPadding.Value</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textboxaca46aab518a4a63961204af68e59030">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>=Fields!Items_5f_Inventory_5f_ByLocation_Lot.Value</Value>
+                                  <Style>
+                                    <Color>=If(RowNumber(Nothing) Mod 2 &lt;&gt; 0, Variables!Style_FontColorValues1.Value, Variables!Style_FontColorValues2.Value)</Color>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <DataElementName>Items_Inventory_ByLocation_Lot</DataElementName>
+                          <Style>
+                            <Border>
+                              <Style>Solid</Style>
+                            </Border>
+                            <BottomBorder>
+                              <Width>=Variables!Style_GridHorizontalWeight.Value</Width>
+                            </BottomBorder>
+                            <LeftBorder>
+                              <Width>=Variables!Style_GridVerticalWeight.Value</Width>
+                            </LeftBorder>
+                            <BackgroundColor>=IIF(RowNumber(Nothing) Mod 2 = 0, "Gainsboro", "White")</BackgroundColor>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>5pt</PaddingRight>
+                            <PaddingTop>=Variables!Style_RowPadding.Value</PaddingTop>
+                            <PaddingBottom>=Variables!Style_RowPadding.Value</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox9486a2da0da54a6baba2e735cfe2ad6a">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>=Fields!Items_5f_Inventory_5f_ByLocation_NetSuite.Value</Value>
+                                  <Style>
+                                    <Format>#,0</Format>
+                                    <Color>=If(RowNumber(Nothing) Mod 2 &lt;&gt; 0, Variables!Style_FontColorValues1.Value, Variables!Style_FontColorValues2.Value)</Color>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <DataElementName>Items_Inventory_ByLocation_NetSuite</DataElementName>
+                          <Style>
+                            <Border>
+                              <Style>Solid</Style>
+                            </Border>
+                            <BottomBorder>
+                              <Width>=Variables!Style_GridHorizontalWeight.Value</Width>
+                            </BottomBorder>
+                            <LeftBorder>
+                              <Width>=Variables!Style_GridVerticalWeight.Value</Width>
+                            </LeftBorder>
+                            <BackgroundColor>=IIF(RowNumber(Nothing) Mod 2 = 0, "Gainsboro", "White")</BackgroundColor>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>5pt</PaddingRight>
+                            <PaddingTop>=Variables!Style_RowPadding.Value</PaddingTop>
+                            <PaddingBottom>=Variables!Style_RowPadding.Value</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox0346c85d5e8e4cd6a84170da5d553563">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>=Fields!Items_5f_Inventory_5f_ByLocation_DSI.Value</Value>
+                                  <Style>
+                                    <Format>#,0</Format>
+                                    <Color>=If(RowNumber(Nothing) Mod 2 &lt;&gt; 0, Variables!Style_FontColorValues1.Value, Variables!Style_FontColorValues2.Value)</Color>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <DataElementName>Items_Inventory_ByLocation_DSI</DataElementName>
+                          <Style>
+                            <Border>
+                              <Style>Solid</Style>
+                            </Border>
+                            <BottomBorder>
+                              <Width>=Variables!Style_GridHorizontalWeight.Value</Width>
+                            </BottomBorder>
+                            <LeftBorder>
+                              <Width>=Variables!Style_GridVerticalWeight.Value</Width>
+                            </LeftBorder>
+                            <BackgroundColor>=IIF(RowNumber(Nothing) Mod 2 = 0, "Gainsboro", "White")</BackgroundColor>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>5pt</PaddingRight>
+                            <PaddingTop>=Variables!Style_RowPadding.Value</PaddingTop>
+                            <PaddingBottom>=Variables!Style_RowPadding.Value</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox7d71a088abf64edf932f70aa8934dd19">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>=Fields!Items_5f_Inventory_5f_ByLocation_Difference.Value</Value>
+                                  <Style>
+                                    <Format>#,0</Format>
+                                    <Color>=If(RowNumber(Nothing) Mod 2 &lt;&gt; 0, Variables!Style_FontColorValues1.Value, Variables!Style_FontColorValues2.Value)</Color>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <DataElementName>Items_Inventory_ByLocation_Difference</DataElementName>
+                          <Style>
+                            <Border>
+                              <Style>Solid</Style>
+                            </Border>
+                            <BottomBorder>
+                              <Width>=Variables!Style_GridHorizontalWeight.Value</Width>
+                            </BottomBorder>
+                            <LeftBorder>
+                              <Width>=Variables!Style_GridVerticalWeight.Value</Width>
+                            </LeftBorder>
+                            <BackgroundColor>=IIF(RowNumber(Nothing) Mod 2 = 0, "Gainsboro", "White")</BackgroundColor>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>5pt</PaddingRight>
+                            <PaddingTop>=Variables!Style_RowPadding.Value</PaddingTop>
+                            <PaddingBottom>=Variables!Style_RowPadding.Value</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                  </TablixCells>
+                </TablixRow>
+              </TablixRows>
+            </TablixBody>
+            <TablixColumnHierarchy>
+              <TablixMembers>
+                <TablixMember>
+                  <FixedData>true</FixedData>
+                </TablixMember>
+                <TablixMember />
+                <TablixMember />
+                <TablixMember />
+                <TablixMember />
+                <TablixMember />
+                <TablixMember />
+              </TablixMembers>
+            </TablixColumnHierarchy>
+            <TablixRowHierarchy>
+              <TablixMembers>
+                <TablixMember>
+                  <FixedData>true</FixedData>
+                  <KeepWithGroup>After</KeepWithGroup>
+                  <RepeatOnNewPage>true</RepeatOnNewPage>
+                </TablixMember>
+                <TablixMember>
+                  <Group Name="Details" />
+                </TablixMember>
+              </TablixMembers>
+            </TablixRowHierarchy>
+            <RepeatColumnHeaders>true</RepeatColumnHeaders>
+            <RepeatRowHeaders>true</RepeatRowHeaders>
+            <DataSetName>DataSet1</DataSetName>
+            <Top>15.875mm</Top>
+            <Height>15.875mm</Height>
+            <Width>363.71388mm</Width>
+            <Style />
+          </Tablix>
+          <Textbox Name="Textbox7">
+            <rd:DefaultName>Textbox7</rd:DefaultName>
+            <CanGrow>true</CanGrow>
+            <KeepTogether>true</KeepTogether>
+            <Paragraphs>
+              <Paragraph>
+                <TextRuns>
+                  <TextRun>
+                    <Value>NetSuite vs DSI Inventory</Value>
+                    <Style>
+                      <FontFamily>Calibri</FontFamily>
+                      <FontSize>14pt</FontSize>
+                      <FontWeight>Bold</FontWeight>
+                      <Color>White</Color>
+                    </Style>
+                  </TextRun>
+                </TextRuns>
+                <Style>
+                  <TextAlign>Center</TextAlign>
+                </Style>
+              </Paragraph>
+            </Paragraphs>
+            <Left>4.17361in</Left>
+            <Height>0.4375in</Height>
+            <Width>3.14583in</Width>
+            <ZIndex>1</ZIndex>
+            <Style>
+              <Border>
+                <Style>None</Style>
+              </Border>
+              <BackgroundColor>Maroon</BackgroundColor>
+              <PaddingLeft>2pt</PaddingLeft>
+              <PaddingRight>2pt</PaddingRight>
+              <PaddingTop>2pt</PaddingTop>
+              <PaddingBottom>2pt</PaddingBottom>
+            </Style>
+          </Textbox>
+          <Textbox Name="Textbox8">
+            <rd:DefaultName>Textbox8</rd:DefaultName>
+            <CanGrow>true</CanGrow>
+            <KeepTogether>true</KeepTogether>
+            <Paragraphs>
+              <Paragraph>
+                <TextRuns>
+                  <TextRun>
+                    <Value>="As of: " &amp; Format(Max(Fields!Items_5f_Inventory_5f_ByLocation_Today.Value, "DataSet1"), "MM/dd/yyyy hh:mm tt")</Value>
+                    <Style>
+                      <FontFamily>Calibri</FontFamily>
+                      <Color>White</Color>
+                    </Style>
+                  </TextRun>
+                </TextRuns>
+                <Style>
+                  <TextAlign>Center</TextAlign>
+                </Style>
+              </Paragraph>
+            </Paragraphs>
+            <Top>0.1875in</Top>
+            <Left>11.88195in</Left>
+            <Height>0.25in</Height>
+            <Width>2.4375in</Width>
+            <ZIndex>2</ZIndex>
+            <Style>
+              <Border>
+                <Style>None</Style>
+              </Border>
+              <BackgroundColor>Maroon</BackgroundColor>
+              <PaddingLeft>2pt</PaddingLeft>
+              <PaddingRight>2pt</PaddingRight>
+              <PaddingTop>2pt</PaddingTop>
+              <PaddingBottom>2pt</PaddingBottom>
+            </Style>
+          </Textbox>
+        </ReportItems>
+        <Height>57.15mm</Height>
+        <Style>
+          <Border>
+            <Style>None</Style>
+          </Border>
+        </Style>
+      </Body>
+      <Width>600.60416mm</Width>
+      <Page>
+        <LeftMargin>0.5in</LeftMargin>
+        <RightMargin>0.5in</RightMargin>
+        <TopMargin>0.5in</TopMargin>
+        <BottomMargin>0.5in</BottomMargin>
+        <Style />
+      </Page>
+    </ReportSection>
+  </ReportSections>
+  <ReportParameters>
+    <ReportParameter Name="ReportTypeParm">
+      <DataType>String</DataType>
+      <DefaultValue>
+        <DataSetReference>
+          <DataSetName>ReportTypeList</DataSetName>
+          <ValueField>Items_Inventory_ByLocation_ReportType_</ValueField>
+        </DataSetReference>
+      </DefaultValue>
+      <Prompt>Select Report Type</Prompt>
+      <ValidValues>
+        <DataSetReference>
+          <DataSetName>ReportTypeList</DataSetName>
+          <ValueField>Items_Inventory_ByLocation_ReportType_</ValueField>
+          <LabelField>Items_Inventory_ByLocation_ReportType_</LabelField>
+        </DataSetReference>
+      </ValidValues>
+      <MultiValue>true</MultiValue>
+      <cl:ComponentMetadata>
+        <cl:HideUpdateNotifications>true</cl:HideUpdateNotifications>
+      </cl:ComponentMetadata>
+    </ReportParameter>
+  </ReportParameters>
+  <ReportParametersLayout>
+    <GridLayoutDefinition>
+      <NumberOfColumns>4</NumberOfColumns>
+      <NumberOfRows>2</NumberOfRows>
+      <CellDefinitions>
+        <CellDefinition>
+          <ColumnIndex>0</ColumnIndex>
+          <RowIndex>0</RowIndex>
+          <ParameterName>ReportTypeParm</ParameterName>
+        </CellDefinition>
+      </CellDefinitions>
+    </GridLayoutDefinition>
+  </ReportParametersLayout>
+  <Language>=User!Language</Language>
+  <Variables>
+    <Variable Name="Theme_BackGroundColor">
+      <Value>#FFFFFF</Value>
+    </Variable>
+    <Variable Name="Theme_ForeGroundColor">
+      <Value>#252423</Value>
+    </Variable>
+    <Variable Name="Theme_TableAccentColor">
+      <Value>#118DFF</Value>
+    </Variable>
+    <Variable Name="Style_OutlineColor">
+      <Value>#118DFF</Value>
+    </Variable>
+    <Variable Name="Style_GridColor">
+      <Value>#E5E5E5</Value>
+    </Variable>
+    <Variable Name="Style_GridVerticalEnabledTable">
+      <Value>false</Value>
+    </Variable>
+    <Variable Name="Style_GridVerticalWeight">
+      <Value>0pt</Value>
+    </Variable>
+    <Variable Name="Style_GridHorizontalEnabledTable">
+      <Value>true</Value>
+    </Variable>
+    <Variable Name="Style_GridHorizontalWeight">
+      <Value>0.5pt</Value>
+    </Variable>
+    <Variable Name="Style_HeaderEnableBorderBottom">
+      <Value>true</Value>
+    </Variable>
+    <Variable Name="Style_HeaderBorderBottomWeight">
+      <Value>1.0pt</Value>
+    </Variable>
+    <Variable Name="Style_BackColorHeaders">
+      <Value>#FFFFFF</Value>
+    </Variable>
+    <Variable Name="Style_FontColorHeaders">
+      <Value>#252423</Value>
+    </Variable>
+    <Variable Name="Style_BackColorValues1">
+      <Value>#FFFFFF</Value>
+    </Variable>
+    <Variable Name="Style_BackColorValues2">
+      <Value>#EEEDED</Value>
+    </Variable>
+    <Variable Name="Style_FontColorValues2">
+      <Value>#252423</Value>
+    </Variable>
+    <Variable Name="Style_FontColorValues1">
+      <Value>#252423</Value>
+    </Variable>
+    <Variable Name="Style_RowPadding">
+      <Value>3pt</Value>
+    </Variable>
+  </Variables>
+</Report>

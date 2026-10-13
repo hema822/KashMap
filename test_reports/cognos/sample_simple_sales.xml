@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<report xmlns="http://developer.cognos.com/schemas/report/15.5/">
+  <reportName>Simple Sales Summary</reportName>
+  <modelPath>/content/package[@name='GO Sales (query)']/model[@name='model']</modelPath>
+  <queries>
+    <query name="SalesQuery">
+      <source>
+        <model/>
+      </source>
+      <selection>
+        <dataItem name="Product_Line" aggregate="none">
+          <expression>[Sales].[Products].[Product_Line]</expression>
+        </dataItem>
+        <dataItem name="Quantity" aggregate="total">
+          <expression>[Sales].[Sales].[Quantity]</expression>
+        </dataItem>
+        <dataItem name="Revenue" aggregate="total">
+          <expression>[Sales].[Sales].[Revenue]</expression>
+        </dataItem>
+      </selection>
+    </query>
+  </queries>
+  <layouts>
+    <layout>
+      <reportPages>
+        <page name="SummaryPage">
+          <pageBody>
+            <contents>
+              <list name="SimpleSalesList" refQuery="SalesQuery">
+                <listColumns>
+                  <listColumn>
+                    <listColumnTitle><contents><textItem><text>Product Line</text></textItem></contents></listColumnTitle>
+                    <listColumnBody><contents><textItem><text>[Product_Line]</text></textItem></contents></listColumnBody>
+                  </listColumn>
+                  <listColumn>
+                    <listColumnTitle><contents><textItem><text>Quantity</text></textItem></contents></listColumnTitle>
+                    <listColumnBody><contents><textItem><text>[Quantity]</text></textItem></contents></listColumnBody>
+                  </listColumn>
+                  <listColumn>
+                    <listColumnTitle><contents><textItem><text>Revenue</text></textItem></contents></listColumnTitle>
+                    <listColumnBody><contents><textItem><text>[Revenue]</text></textItem></contents></listColumnBody>
+                  </listColumn>
+                </listColumns>
+              </list>
+            </contents>
+          </pageBody>
+        </page>
+      </reportPages>
+    </layout>
+  </layouts>
+</report>

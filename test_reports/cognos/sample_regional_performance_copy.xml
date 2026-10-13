@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<report xmlns="http://developer.cognos.com/schemas/report/15.5/">
+  <reportName>Enterprise Regional Performance (Copy)</reportName>
+  <modelPath>/content/package[@name='GO Sales (query)']/model[@name='model']</modelPath>
+  <queries>
+    <query name="Query1">
+      <source>
+        <model/>
+      </source>
+      <selection>
+        <dataItem name="Region" aggregate="none">
+          <expression>[Sales].[Branch].[Region]</expression>
+        </dataItem>
+        <dataItem name="Country" aggregate="none">
+          <expression>[Sales].[Branch].[Country]</expression>
+        </dataItem>
+        <dataItem name="Revenue" aggregate="total">
+          <expression>[Sales].[Sales].[Revenue]</expression>
+        </dataItem>
+        <dataItem name="Cost" aggregate="total">
+          <expression>[Sales].[Sales].[Product_Cost]</expression>
+        </dataItem>
+        <dataItem name="Profit_Category" aggregate="calculated">
+          <expression>if ([Revenue] &gt; 100000) then ('High') else if ([Revenue] &gt; 50000) then ('Med') else ('Low')</expression>
+        </dataItem>
+        <dataItem name="Effective_Margin" aggregate="calculated">
+          <expression>([Revenue] - coalesce([Cost], 0)) / nullif([Revenue], 0)</expression>
+        </dataItem>
+        <dataItem name="Regional_Rollup" aggregate="calculated">
+          <expression>total([Revenue] for [Region])</expression>
+        </dataItem>
+        <dataItem name="Clean_Country" aggregate="calculated">
+          <expression>upper(trim([Country]))</expression>
+        </dataItem>
+        <dataItem name="Next_Quarter_Date" aggregate="calculated">
+          <expression>_add_days(current_date, 90)</expression>
+        </dataItem>
+        <dataItem name="Prompted_Filter_Field" aggregate="calculated">
+          <expression>#prompt('pRegion', 'string', "'North'")#</expression>
+        </dataItem>
+        <dataItem name="Unsupported_MDX" aggregate="calculated">
+          <expression>tuple([Sales], ancestor([Product], 1))</expression>
+        </dataItem>
+      </selection>
+      <detailFilters>
+        <detailFilter>
+          <filterExpression>[Region] in ('East', 'West') and [Revenue] &gt; 1000</filterExpression>
+        </detailFilter>
+      </detailFilters>
+    </query>
+  </queries>
+  <layouts>
+    <layout>
+      <reportPages>
+        <page name="Page1">
+          <pageBody>
+            <contents>
+              <list name="Regional_Summary_List" refQuery="Query1">
+                <listColumns>
+                  <listColumn>
+                    <listColumnTitle><contents><textItem><text>Region</text></textItem></contents></listColumnTitle>
+                    <listColumnBody><contents><textItem><text>[Region]</text></textItem></contents></listColumnBody>
+                  </listColumn>
+                  <listColumn>
+                    <listColumnTitle><contents><textItem><text>Revenue</text></textItem></contents></listColumnTitle>
+                    <listColumnBody><contents><textItem><text>[Revenue]</text></textItem></contents></listColumnBody>
+                  </listColumn>
+                  <listColumn>
+                    <listColumnTitle><contents><textItem><text>Profit Category</text></textItem></contents></listColumnTitle>
+                    <listColumnBody><contents><textItem><text>[Profit_Category]</text></textItem></contents></listColumnBody>
+                  </listColumn>
+                </listColumns>
+              </list>
+            </contents>
+          </pageBody>
+        </page>
+      </reportPages>
+    </layout>
+  </layouts>
+</report>

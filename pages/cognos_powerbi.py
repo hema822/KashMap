@@ -1,3 +1,8 @@
+"""
+Cognos to Power BI Migration Page.
+Exclusively processes IBM Cognos XML report specifications, Data Modules, and Framework Manager models.
+For WebFOCUS .fex procedures, use pages/webfocus_powerbi.py.
+"""
 import sys
 from pathlib import Path
 import runpy

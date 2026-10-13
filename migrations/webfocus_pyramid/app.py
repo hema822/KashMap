@@ -5,6 +5,7 @@ from io import BytesIO
 from html import escape
 from pathlib import Path
 from collections import Counter, defaultdict
+from functools import lru_cache
 from typing import Literal, Optional
 from pydantic import BaseModel, Field, ValidationError, ConfigDict, AliasChoices, field_validator
 
@@ -539,10 +540,12 @@ def build_rule_findings(parsed, mapping_df, final_table_name):
 
     return findings, decode_pack
 
+@lru_cache(maxsize=128)
 def _fill(bg):
     return PatternFill('solid', start_color=bg)
 
 
+@lru_cache(maxsize=128)
 def _font(fg, bold=False):
     return Font(name='Arial', size=9, color=fg, bold=bold)
 
@@ -3617,6 +3620,8 @@ def build_display_tables(parsed_results, duplicate_records, allowed_program_name
         for record in duplicate_records
     }
 
+    large_mode = len(parsed_results) > 100
+
     overview_rows = []
     field_rows = []
     filter_rows = []
@@ -3631,11 +3636,6 @@ def build_display_tables(parsed_results, duplicate_records, allowed_program_name
     drilldown_rows = []
     validation_rows = []
     modeler_plan_rows = []
-    semantic_tables_rows = []
-    semantic_columns_rows = []
-    semantic_measures_rows = []
-    semantic_relationships_rows = []
-    semantic_hierarchies_rows = []
 
     for folder, fex_name, parsed in parsed_results:
         dup = duplicate_lookup.get((folder, fex_name), {})
@@ -3723,121 +3723,97 @@ def build_display_tables(parsed_results, duplicate_records, allowed_program_name
         if parsed is None:
             continue
 
-        for row in field_inventory_value_rows(parsed, folder, fex_name):
-            field_rows.append(dict(zip(FIELD_INVENTORY_HEADERS, row)))
+        if not large_mode and parsed is not None:
+            for row in field_inventory_value_rows(parsed, folder, fex_name):
+                field_rows.append(dict(zip(FIELD_INVENTORY_HEADERS, row)))
 
-        for item in parsed['filter_parameter_mapping']:
-            filter_rows.append({
-                'File Path': folder,
-                'FEX Name': fex_name,
-                'Filter Type': item['type'],
-                'Expression': item['expression'],
-                'Parameter': ', '.join(item['parameters']),
-                'Fields Used': ', '.join(item['fields']),
-                'Pyramid Guidance': item['pyramid_guidance'],
-                'Suggested Pyramid Type': item.get('suggested_pyramid_type', ''),
-                'Suggested Pyramid Expression / Action': item.get('suggested_pyramid_expression_action', ''),
-                'LLM Notes': item.get('llm_notes', ''),
-                'Needs Manual Review': item.get('needs_manual_review', ''),
-                'Review Reason': item.get('review_reason', ''),
-                'Confidence': item.get('confidence', ''),
-            })
+            for item in parsed['filter_parameter_mapping']:
+                filter_rows.append({
+                    'File Path': folder,
+                    'FEX Name': fex_name,
+                    'Filter Type': item['type'],
+                    'Expression': item['expression'],
+                    'Parameter': ', '.join(item['parameters']),
+                    'Fields Used': ', '.join(item['fields']),
+                    'Pyramid Guidance': item['pyramid_guidance'],
+                    'Suggested Pyramid Type': item.get('suggested_pyramid_type', ''),
+                    'Suggested Pyramid Expression / Action': item.get('suggested_pyramid_expression_action', ''),
+                    'LLM Notes': item.get('llm_notes', ''),
+                    'Needs Manual Review': item.get('needs_manual_review', ''),
+                    'Review Reason': item.get('review_reason', ''),
+                    'Confidence': item.get('confidence', ''),
+                })
 
-        for item in parsed['formula_mapping']:
-            formula_rows.append({
-                'File Path': folder,
-                'FEX Name': fex_name,
-                'Formula Source': item['formula_source'],
-                'Field Name': item['field'],
-                'Result Datatype': item['format'],
-                'Formula Type': item['formula_type'],
-                'Raw WebFOCUS Formula': item['formula'],
-                'Raw Columns Used': ', '.join(item['raw_fields']),
-                'Parameters': ', '.join(item['parameters']),
-                'Suggested Pyramid Type': item.get('suggested_pyramid_type', ''),
-                'Suggested Pyramid Expression / Action': item.get('suggested_pyramid_expression_action', ''),
-                'Needs Manual Review': item.get('needs_manual_review', ''),
-                'Review Reason': item.get('review_reason', ''),
-                'Confidence': item.get('confidence', ''),
-            })
+            for item in parsed['formula_mapping']:
+                formula_rows.append({
+                    'File Path': folder,
+                    'FEX Name': fex_name,
+                    'Formula Source': item['formula_source'],
+                    'Field Name': item['field'],
+                    'Result Datatype': item['format'],
+                    'Formula Type': item['formula_type'],
+                    'Raw WebFOCUS Formula': item['formula'],
+                    'Raw Columns Used': ', '.join(item['raw_fields']),
+                    'Parameters': ', '.join(item['parameters']),
+                    'Suggested Pyramid Type': item.get('suggested_pyramid_type', ''),
+                    'Suggested Pyramid Expression / Action': item.get('suggested_pyramid_expression_action', ''),
+                    'Needs Manual Review': item.get('needs_manual_review', ''),
+                    'Review Reason': item.get('review_reason', ''),
+                    'Confidence': item.get('confidence', ''),
+                })
 
-        for item in parsed['join_match_mapping']:
-            join_rows.append({
-                'File Path': folder,
-                'File Name': fex_name,
-                'Mapping Type': item['mapping_type'],
-                'From Table': item['from_table'],
-                'From Key': item['from_key'],
-                'To Table': item['to_table'],
-                'To Key': item['to_key'],
-                'WebFOCUS Join Mode': item['join_type'],
-                'Output HOLD': item['output_hold'],
-                'Raw WebFOCUS Statement': item['raw_statement'],
-                'Suggested Pyramid Action': item.get('suggested_pyramid_expression_action', ''),
-                'Needs Manual Review': item.get('needs_manual_review', ''),
-                'Review Reason': item.get('review_reason', ''),
-                'Confidence': item.get('confidence', ''),
-            })
+            for item in parsed['join_match_mapping']:
+                join_rows.append({
+                    'File Path': folder,
+                    'File Name': fex_name,
+                    'Mapping Type': item['mapping_type'],
+                    'From Table': item['from_table'],
+                    'From Key': item['from_key'],
+                    'To Table': item['to_table'],
+                    'To Key': item['to_key'],
+                    'WebFOCUS Join Mode': item['join_type'],
+                    'Output HOLD': item['output_hold'],
+                    'Raw WebFOCUS Statement': item['raw_statement'],
+                    'Suggested Pyramid Action': item.get('suggested_pyramid_expression_action', ''),
+                    'Needs Manual Review': item.get('needs_manual_review', ''),
+                    'Review Reason': item.get('review_reason', ''),
+                    'Confidence': item.get('confidence', ''),
+                })
 
-        for item in parsed['source_inventory']:
-            row = {'File Path': folder, 'File Name': fex_name}
-            row.update(item)
-            source_rows.append(row)
+            for item in parsed['source_inventory']:
+                row = {'File Path': folder, 'File Name': fex_name}
+                row.update(item)
+                source_rows.append(row)
 
-        for item in parsed['hold_lineage']:
-            row = {'File Path': folder, 'File Name': fex_name}
-            row.update(item)
-            lineage_rows.append(row)
+            for item in parsed['hold_lineage']:
+                row = {'File Path': folder, 'File Name': fex_name}
+                row.update(item)
+                lineage_rows.append(row)
 
-        for item in parsed['mapping_table_preview']:
-            row = {'File Path': folder, 'File Name': fex_name}
-            row.update(item)
-            mapping_rows.append(row)
+            for item in parsed['mapping_table_preview']:
+                row = {'File Path': folder, 'File Name': fex_name}
+                row.update(item)
+                mapping_rows.append(row)
 
-        for item in parsed['final_dataset_plan']:
-            row = {'File Path': folder, 'File Name': fex_name}
-            row.update(item)
-            final_dataset_rows.append(row)
+            for item in parsed['final_dataset_plan']:
+                row = {'File Path': folder, 'File Name': fex_name}
+                row.update(item)
+                final_dataset_rows.append(row)
 
-        for item in parsed['pyramid_build_plan']:
-            row = {'File Path': folder, 'File Name': fex_name}
-            row.update(item)
-            build_plan_rows.append(row)
+            for item in parsed['pyramid_build_plan']:
+                row = {'File Path': folder, 'File Name': fex_name}
+                row.update(item)
+                build_plan_rows.append(row)
 
-        for item in parsed['drilldowns']:
-            row = {'File Path': folder, 'File Name': fex_name}
-            row.update(item)
-            drilldown_rows.append(row)
+            for item in parsed['drilldowns']:
+                row = {'File Path': folder, 'File Name': fex_name}
+                row.update(item)
+                drilldown_rows.append(row)
 
-        for item in parsed.get('pyramid_modeler_plan', []):
-            row = {'File Path': folder, 'File Name': fex_name}
-            row.update(item)
-            modeler_plan_rows.append(row)
-
-        sem = parsed.get('migration_logic', {}).get('semantic_model', {})
-        for item in sem.get('tables', []):
-            row = {'File Path': folder, 'File Name': fex_name}
-            row.update(item)
-            semantic_tables_rows.append(row)
-        for item in sem.get('columns', []):
-            row = {'File Path': folder, 'File Name': fex_name}
-            row.update(item)
-            semantic_columns_rows.append(row)
-        for item in sem.get('measures', []):
-            row = {'File Path': folder, 'File Name': fex_name}
-            row.update(item)
-            semantic_measures_rows.append(row)
-        for item in sem.get('relationships', []):
-            row = {'File Path': folder, 'File Name': fex_name}
-            row.update(item)
-            semantic_relationships_rows.append(row)
-        for item in sem.get('hierarchies', []):
-            row = {'File Path': folder, 'File Name': fex_name}
-            row_dict = dict(item)
-            if isinstance(row_dict.get('levels'), list):
-                row_dict['levels'] = ' -> '.join(str(lvl) for lvl in row_dict['levels'])
-            row.update(row_dict)
-            semantic_hierarchies_rows.append(row)
+            for item in parsed.get('pyramid_modeler_plan', []):
+                row = {'File Path': folder, 'File Name': fex_name}
+                row.update(item)
+                modeler_plan_rows.append(row)
 
     matched_lookup = defaultdict(list)
     for ra_program, fex_name in matched_pairs:
@@ -3868,11 +3844,11 @@ def build_display_tables(parsed_results, duplicate_records, allowed_program_name
         'resource_analyzer': pd.DataFrame(ra_rows),
         'validation': pd.DataFrame(validation_rows),
         'modeler_plan': pd.DataFrame(modeler_plan_rows),
-        'semantic_tables': pd.DataFrame(semantic_tables_rows),
-        'semantic_columns': pd.DataFrame(semantic_columns_rows),
-        'semantic_measures': pd.DataFrame(semantic_measures_rows),
-        'semantic_relationships': pd.DataFrame(semantic_relationships_rows),
-        'semantic_hierarchies': pd.DataFrame(semantic_hierarchies_rows),
+        'semantic_tables': pd.DataFrame(),
+        'semantic_columns': pd.DataFrame(),
+        'semantic_measures': pd.DataFrame(),
+        'semantic_relationships': pd.DataFrame(),
+        'semantic_hierarchies': pd.DataFrame(),
         'parsed_results_map': {(folder, fex_name): parsed for folder, fex_name, parsed in parsed_results},
     }
 
@@ -4201,14 +4177,50 @@ def collect_fex_from_zip(uploaded_zip):
 
 
 
+class LazyBytesIO:
+    """A file-like object and callable that enables deferred, on-demand
+    Excel generation in Streamlit without blocking page rendering."""
+
+    def __init__(self, generator_fn):
+        self._generator_fn = generator_fn
+        self._bytes_io = None
+        self.__name__ = "generate_excel_workbook"
+
+    def _get_io(self):
+        if self._bytes_io is None:
+            self._bytes_io = self._generator_fn()
+        return self._bytes_io
+
+    def __call__(self):
+        return self._get_io().getvalue()
+
+    def getvalue(self):
+        return self._get_io().getvalue()
+
+    def read(self, *args, **kwargs):
+        return self._get_io().read(*args, **kwargs)
+
+    def seek(self, *args, **kwargs):
+        return self._get_io().seek(*args, **kwargs)
+
+    def tell(self):
+        return self._get_io().tell()
+
+
 def _append_row_values(ws, values, bg='FFFFFF', fg='000000', bold=False):
+    if not bold and bg == 'FFFFFF' and fg == '000000':
+        ws.append([_excel_safe_value(v) for v in values])
+        return
+
+    f = _font(fg, bold)
+    fl = _fill(bg)
     cells = []
 
     for value in values:
         cell = WriteOnlyCell(ws, value=_excel_safe_value(value))
-        cell.font = _font(fg, bold)
+        cell.font = f
         cell.alignment = WRAP_TOP
-        cell.fill = _fill(bg)
+        cell.fill = fl
         cell.border = BORDER
         cells.append(cell)
 
@@ -4369,7 +4381,8 @@ def build_output_workbook_cloud_safe(fex_items, allowed_program_names, matched_p
             errors.append(f"{fex_name}: {e}")
             parsed_results.append((folder, fex_name, None))
 
-        progress.progress(idx / total * 0.50 if total else 1.0)
+        if idx % 50 == 0 or idx == total:
+            progress.progress(idx / total * 0.50 if total else 1.0)
 
     duplicate_records = build_duplicate_analysis(parsed_results)
     apply_llm_translations(parsed_results, llm_options)
@@ -4402,179 +4415,170 @@ def build_output_workbook_cloud_safe(fex_items, allowed_program_names, matched_p
             unique_tables, mas_files or {}, acx_files or {}
         )
 
-    status.text("Pass 2 of 2: Creating low-memory Excel workbook...")
-    wb = Workbook(write_only=True)
+    def _create_full_workbook():
+        wb = Workbook(write_only=True)
 
-    ws_detail = _setup_write_only_sheet(wb, 'Field Inventory', FIELD_INVENTORY_HEADERS, FIELD_INVENTORY_WIDTHS)
-    ws_duplicates = _setup_write_only_sheet(wb, 'Duplicate Analysis', DUPLICATE_ANALYSIS_HEADERS, DUPLICATE_ANALYSIS_WIDTHS)
-    ws_ra = _setup_write_only_sheet(wb, 'Resource Analyzer Matches', RESOURCE_ANALYZER_HEADERS, RESOURCE_ANALYZER_WIDTHS)
-    ws_filters = _setup_write_only_sheet(wb, 'Filters and Parameters', FILTER_PARAM_HEADERS, FILTER_PARAM_WIDTHS)
-    ws_formulas = _setup_write_only_sheet(wb, 'Formula Mapping', FORMULA_MAPPING_HEADERS, FORMULA_MAPPING_WIDTHS)
-    ws_join = _setup_write_only_sheet(wb, 'Join Match', JOIN_MATCH_HEADERS, JOIN_MATCH_WIDTHS)
-    ws_summary = _setup_write_only_sheet(wb, 'Final Summary', FINAL_SUMMARY_HEADERS, FINAL_SUMMARY_WIDTHS)
-    ws_validation = _setup_write_only_sheet(wb, 'Validation Checklist', VALIDATION_CHECKLIST_HEADERS, VALIDATION_CHECKLIST_WIDTHS)
-    ws_table_db_mapping = _setup_write_only_sheet(wb, 'Table DB Mapping', TABLE_DB_MAPPING_HEADERS, TABLE_DB_MAPPING_WIDTHS)
+        ws_detail = _setup_write_only_sheet(wb, 'Field Inventory', FIELD_INVENTORY_HEADERS, FIELD_INVENTORY_WIDTHS)
+        ws_duplicates = _setup_write_only_sheet(wb, 'Duplicate Analysis', DUPLICATE_ANALYSIS_HEADERS, DUPLICATE_ANALYSIS_WIDTHS)
+        ws_ra = _setup_write_only_sheet(wb, 'Resource Analyzer Matches', RESOURCE_ANALYZER_HEADERS, RESOURCE_ANALYZER_WIDTHS)
+        ws_filters = _setup_write_only_sheet(wb, 'Filters and Parameters', FILTER_PARAM_HEADERS, FILTER_PARAM_WIDTHS)
+        ws_formulas = _setup_write_only_sheet(wb, 'Formula Mapping', FORMULA_MAPPING_HEADERS, FORMULA_MAPPING_WIDTHS)
+        ws_join = _setup_write_only_sheet(wb, 'Join Match', JOIN_MATCH_HEADERS, JOIN_MATCH_WIDTHS)
+        ws_summary = _setup_write_only_sheet(wb, 'Final Summary', FINAL_SUMMARY_HEADERS, FINAL_SUMMARY_WIDTHS)
+        ws_validation = _setup_write_only_sheet(wb, 'Validation Checklist', VALIDATION_CHECKLIST_HEADERS, VALIDATION_CHECKLIST_WIDTHS)
+        ws_table_db_mapping = _setup_write_only_sheet(wb, 'Table DB Mapping', TABLE_DB_MAPPING_HEADERS, TABLE_DB_MAPPING_WIDTHS)
 
-    status.text("Writing Field Inventory sheet...")
-    for idx, (folder, fex_name, parsed) in enumerate(parsed_results, start=1):
-        if parsed is None:
-            continue
-        try:
-            for row_values in field_inventory_value_rows(parsed, folder, fex_name):
-                origin = row_values[5]
-                if origin == 'DB':
-                    bg, fg = COLORS['source']
-                elif row_values[10] == 'DEFINE':
-                    bg, fg = COLORS['define']
-                elif row_values[10] == 'COMPUTE':
-                    bg, fg = COLORS['compute']
-                else:
-                    bg, fg = 'FFFFFF', '000000'
-                _append_row_values(ws_detail, row_values, bg, fg)
-        except Exception as e:
-            errors.append(f"{fex_name} write error: {e}")
+        field_inventory_row_count = 0
+        for folder, fex_name, parsed in parsed_results:
+            if parsed is None:
+                continue
+            try:
+                for row_values in field_inventory_value_rows(parsed, folder, fex_name):
+                    field_inventory_row_count += 1
+                    origin = row_values[5]
+                    if origin == 'DB':
+                        bg, fg = COLORS['source']
+                    elif row_values[10] == 'DEFINE':
+                        bg, fg = COLORS['define']
+                    elif row_values[10] == 'COMPUTE':
+                        bg, fg = COLORS['compute']
+                    else:
+                        bg, fg = 'FFFFFF', '000000'
+                    _append_row_values(ws_detail, row_values, bg, fg)
+            except Exception as e:
+                errors.append(f"{fex_name} write error: {e}")
 
-        progress.progress(0.50 + idx / total * 0.20 if total else 0.70)
+        category_colors = {
+            'Exact Duplicate': COLORS['grp_a'],
+            'Near Duplicate': COLORS['grp_b'],
+            'Same Data Source': COLORS['grp_c'],
+            'Unique': COLORS['unique'],
+            'Unparsed': COLORS['unparsed'],
+        }
+        for record in sorted(duplicate_records, key=lambda r: (r['category'], r['folder'].lower(), r['fex_name'].lower())):
+            profile = record['profile'] or {}
+            row_values = [
+                record['category'],
+                record['group_id'],
+                record['group_size'],
+                record['folder'],
+                record['fex_name'],
+                ', '.join(sorted(profile.get('real_tables', []))),
+                len(profile.get('all_fields', [])),
+                ', '.join(record['exact_matches']),
+                ', '.join(record['near_matches']),
+                ', '.join(record['same_source_matches']),
+                f"{record['best_similarity']:.0%}" if record['best_similarity'] else '',
+                record['difference_summary'],
+            ]
+            bg, fg = category_colors.get(record['category'], ('FFFFFF', '000000'))
+            _append_row_values(ws_duplicates, row_values, bg, fg, bold=record['category'] in {'Exact Duplicate', 'Near Duplicate'})
 
-    status.text("Writing Duplicate Analysis sheet...")
-    category_colors = {
-        'Exact Duplicate': COLORS['grp_a'],
-        'Near Duplicate': COLORS['grp_b'],
-        'Same Data Source': COLORS['grp_c'],
-        'Unique': COLORS['unique'],
-        'Unparsed': COLORS['unparsed'],
-    }
-    for record in sorted(duplicate_records, key=lambda r: (r['category'], r['folder'].lower(), r['fex_name'].lower())):
-        profile = record['profile'] or {}
-        row_values = [
-            record['category'],
-            record['group_id'],
-            record['group_size'],
-            record['folder'],
-            record['fex_name'],
-            ', '.join(sorted(profile.get('real_tables', []))),
-            len(profile.get('all_fields', [])),
-            ', '.join(record['exact_matches']),
-            ', '.join(record['near_matches']),
-            ', '.join(record['same_source_matches']),
-            f"{record['best_similarity']:.0%}" if record['best_similarity'] else '',
-            record['difference_summary'],
+        matched_lookup = defaultdict(list)
+        for ra_program, fex_name in matched_pairs:
+            matched_lookup[ra_program].append(fex_name)
+        for program_name in sorted(allowed_program_names):
+            matched_files = ', '.join(sorted(set(matched_lookup.get(program_name, []))))
+            _append_row_values(ws_ra, [
+                program_name,
+                matched_files if matched_files else 'Not Found in Uploaded FEX Folder/ZIP',
+            ])
+
+        for folder, fex_name, parsed in parsed_results:
+            if parsed is None:
+                continue
+            for item in parsed['filter_parameter_mapping']:
+                _append_row_values(ws_filters, [
+                    folder, fex_name, item['type'], item['expression'],
+                    ', '.join(item['parameters']), ', '.join(item['fields']),
+                ])
+
+        for folder, fex_name, parsed in parsed_results:
+            if parsed is None:
+                continue
+            for item in parsed['formula_mapping']:
+                _append_row_values(ws_formulas, [
+                    folder, fex_name, item['formula_source'], item['field'],
+                    item['format'], item['formula_type'], item['formula'],
+                    ', '.join(item['raw_fields']), ', '.join(item['parameters']),
+                ])
+
+        for folder, fex_name, parsed in parsed_results:
+            if parsed is None:
+                continue
+            for item in parsed['join_match_mapping']:
+                _append_row_values(ws_join, [
+                    folder, fex_name, item['mapping_type'], item['from_table'], item['from_key'],
+                    item['to_table'], item['to_key'], item['join_type'], item['output_hold'],
+                    item['raw_statement'],
+                ])
+
+        for row in table_db_mapping_rows:
+            _append_row_values(ws_table_db_mapping, [
+                row['Unique Table from KashMap'],
+                row['Actual Database Table'],
+                row['Connection'],
+                row['MAS File'],
+                row['ACX File'],
+                row['Evidence / Notes'],
+            ])
+
+        validation_df = display_tables.get('validation', pd.DataFrame())
+        if validation_df is not None and not validation_df.empty:
+            for _, item in validation_df.iterrows():
+                _append_row_values(ws_validation, [
+                    item.get('File Name', ''),
+                    item.get('Check Category', ''),
+                    item.get('Validation Check', ''),
+                    item.get('Trigger Rule', ''),
+                ])
+
+        summary_rows = [
+            ('Total Reports Listed in Resource Analyzer', len(allowed_program_names)),
+            ('Total FEX Files Processed', len(fex_items)),
+            ('Exact Duplicate Files', counts['exact']),
+            ('Near Duplicate Files', counts['near']),
+            ('Same Data Source Files', counts['same_source']),
+            ('Unique Files', counts['unique']),
+            ('Unparsed Files', counts['unparsed']),
+            ('Total Unique Real Source Tables Used', total_tables),
+            ('Field Inventory Rows', field_inventory_row_count),
+            ('Filter / Parameter Rows', sum(len(p['filter_parameter_mapping']) for _, _, p in parsed_results if p is not None)),
+            ('Join / Match Rows', sum(len(p['join_match_mapping']) for _, _, p in parsed_results if p is not None)),
+            ('Output Format Rows Included In Field Inventory', sum(len(p['output_formats']) for _, _, p in parsed_results if p is not None)),
+            ('', ''),
+            ('All Unique Tables Used', 'Table Name'),
         ]
-        bg, fg = category_colors.get(record['category'], ('FFFFFF', '000000'))
-        _append_row_values(ws_duplicates, row_values, bg, fg, bold=record['category'] in {'Exact Duplicate', 'Near Duplicate'})
-    progress.progress(0.76)
+        for row_values in summary_rows:
+            if row_values == ('', ''):
+                _append_row_values(ws_summary, row_values)
+            elif row_values == ('All Unique Tables Used', 'Table Name'):
+                _append_row_values(ws_summary, row_values, bg='FFE7D6', fg='7A2E0E', bold=True)
+            else:
+                _append_row_values(ws_summary, row_values)
 
-    status.text("Writing Resource Analyzer match sheet...")
-    matched_lookup = defaultdict(list)
-    for ra_program, fex_name in matched_pairs:
-        matched_lookup[ra_program].append(fex_name)
-    for program_name in sorted(allowed_program_names):
-        matched_files = ', '.join(sorted(set(matched_lookup.get(program_name, []))))
-        _append_row_values(ws_ra, [
-            program_name,
-            matched_files if matched_files else 'Not Found in Uploaded FEX Folder/ZIP',
-        ])
-    progress.progress(0.82)
+        for idx, table_name in enumerate(sorted(unique_tables), start=1):
+            _append_row_values(ws_summary, [idx, table_name])
 
-    status.text("Writing Filters and Parameters sheet...")
-    for folder, fex_name, parsed in parsed_results:
-        if parsed is None:
-            continue
-        for item in parsed['filter_parameter_mapping']:
-            _append_row_values(ws_filters, [
-                folder, fex_name, item['type'], item['expression'],
-                ', '.join(item['parameters']), ', '.join(item['fields']),
-            ])
-    progress.progress(0.88)
-
-    status.text("Writing Formula Mapping sheet...")
-    for folder, fex_name, parsed in parsed_results:
-        if parsed is None:
-            continue
-        for item in parsed['formula_mapping']:
-            _append_row_values(ws_formulas, [
-                folder, fex_name, item['formula_source'], item['field'],
-                item['format'], item['formula_type'], item['formula'],
-                ', '.join(item['raw_fields']), ', '.join(item['parameters']),
-            ])
-    progress.progress(0.92)
-
-    status.text("Writing Join Match sheet...")
-    for folder, fex_name, parsed in parsed_results:
-        if parsed is None:
-            continue
-        for item in parsed['join_match_mapping']:
-            _append_row_values(ws_join, [
-                folder, fex_name, item['mapping_type'], item['from_table'], item['from_key'],
-                item['to_table'], item['to_key'], item['join_type'], item['output_hold'],
-                item['raw_statement'],
-
-            ])
-    progress.progress(0.95)
-
-    status.text("Writing Table DB Mapping sheet...")
-    for row in table_db_mapping_rows:
-        _append_row_values(ws_table_db_mapping, [
-            row['Unique Table from KashMap'],
-            row['Actual Database Table'],
-            row['Connection'],
-            row['MAS File'],
-            row['ACX File'],
-            row['Evidence / Notes'],
-        ])
-
-    status.text("Writing Validation Checklist sheet...")
-    validation_df = display_tables.get('validation', pd.DataFrame())
-    if validation_df is not None and not validation_df.empty:
-        for _, item in validation_df.iterrows():
-            _append_row_values(ws_validation, [
-                item.get('File Name', ''),
-                item.get('Check Category', ''),
-                item.get('Validation Check', ''),
-                item.get('Trigger Rule', ''),
-            ])
-    progress.progress(0.965)
-
-    status.text("Writing Final Summary sheet...")
-    summary_rows = [
-        ('Total Reports Listed in Resource Analyzer', len(allowed_program_names)),
-        ('Total FEX Files Processed', len(fex_items)),
-        ('Exact Duplicate Files', counts['exact']),
-        ('Near Duplicate Files', counts['near']),
-        ('Same Data Source Files', counts['same_source']),
-        ('Unique Files', counts['unique']),
-        ('Unparsed Files', counts['unparsed']),
-        ('Total Unique Real Source Tables Used', total_tables),
-        ('Field Inventory Rows', sum(1 for _, _, p in parsed_results if p is not None for _ in field_inventory_value_rows(p, '', ''))),
-        ('Filter / Parameter Rows', sum(len(p['filter_parameter_mapping']) for _, _, p in parsed_results if p is not None)),
-        ('Join / Match Rows', sum(len(p['join_match_mapping']) for _, _, p in parsed_results if p is not None)),
-        ('Output Format Rows Included In Field Inventory', sum(len(p['output_formats']) for _, _, p in parsed_results if p is not None)),
-        ('', ''),
-        ('All Unique Tables Used', 'Table Name'),
-    ]
-    for row_values in summary_rows:
-      if row_values == ('', ''):
-          _append_row_values(ws_summary, row_values)
-      elif row_values == ('All Unique Tables Used', 'Table Name'):
-          _append_row_values(ws_summary, row_values, bg='FFE7D6', fg='7A2E0E', bold=True)
-      else:
-        _append_row_values(ws_summary, row_values)
-
-    for idx, table_name in enumerate(sorted(unique_tables), start=1):
-      _append_row_values(ws_summary, [idx, table_name])
-    progress.progress(0.98)
-
-    status.text("Saving Excel workbook...")
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-    progress.progress(1.0)
-    status.text("Excel workbook ready.")
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        return output
 
     table_db_mapping_df = pd.DataFrame(table_db_mapping_rows)
     if not table_db_mapping_df.empty:
         table_db_mapping_df = table_db_mapping_df.astype(str).replace('nan', '')
     display_tables['table_db_mapping'] = table_db_mapping_df
+
+    if len(fex_items) <= 20:
+        status.text("Pass 2 of 2: Creating low-memory Excel workbook...")
+        output = _create_full_workbook()
+        progress.progress(1.0)
+        status.text("Excel workbook ready.")
+    else:
+        output = LazyBytesIO(_create_full_workbook)
+        progress.progress(1.0)
+        status.text(f"Analysis complete ({len(fex_items)} files processed)! Ready to inspect.")
     
     return (
             output,
@@ -5630,15 +5634,147 @@ def build_single_report_excel(report_row, field_df, formula_df, filter_df, join_
     output.seek(0)
     return output    
 
-def filter_report_df(df, fex_name, file_path):
-    if df is None or df.empty:
+def build_report_single_table(parsed, folder, fex_name, table_type):
+    if parsed is None:
         return pd.DataFrame()
 
-    name_col = 'File Name' if 'File Name' in df.columns else 'FEX Name'
-    if name_col not in df.columns or 'File Path' not in df.columns:
-        return pd.DataFrame()
+    if table_type == 'fields':
+        rows = field_inventory_value_rows(parsed, folder, fex_name)
+        return pd.DataFrame(rows, columns=FIELD_INVENTORY_HEADERS)
 
-    return df[(df[name_col] == fex_name) & (df['File Path'] == file_path)]
+    elif table_type == 'filters':
+        rows = []
+        for item in parsed.get('filter_parameter_mapping', []):
+            rows.append({
+                'File Path': folder,
+                'FEX Name': fex_name,
+                'Filter Type': item['type'],
+                'Expression': item['expression'],
+                'Parameter': ', '.join(item['parameters']),
+                'Fields Used': ', '.join(item['fields']),
+                'Pyramid Guidance': item['pyramid_guidance'],
+                'Suggested Pyramid Type': item.get('suggested_pyramid_type', ''),
+                'Suggested Pyramid Expression / Action': item.get('suggested_pyramid_expression_action', ''),
+                'LLM Notes': item.get('llm_notes', ''),
+                'Needs Manual Review': item.get('needs_manual_review', ''),
+                'Review Reason': item.get('review_reason', ''),
+                'Confidence': item.get('confidence', ''),
+            })
+        return pd.DataFrame(rows)
+
+    elif table_type == 'formulas':
+        rows = []
+        for item in parsed.get('formula_mapping', []):
+            rows.append({
+                'File Path': folder,
+                'FEX Name': fex_name,
+                'Formula Source': item['formula_source'],
+                'Field Name': item['field'],
+                'Result Datatype': item['format'],
+                'Formula Type': item['formula_type'],
+                'Raw WebFOCUS Formula': item['formula'],
+                'Raw Columns Used': ', '.join(item['raw_fields']),
+                'Parameters': ', '.join(item['parameters']),
+                'Suggested Pyramid Type': item.get('suggested_pyramid_type', ''),
+                'Suggested Pyramid Expression / Action': item.get('suggested_pyramid_expression_action', ''),
+                'Needs Manual Review': item.get('needs_manual_review', ''),
+                'Review Reason': item.get('review_reason', ''),
+                'Confidence': item.get('confidence', ''),
+            })
+        return pd.DataFrame(rows)
+
+    elif table_type == 'joins':
+        rows = []
+        for item in parsed.get('join_match_mapping', []):
+            rows.append({
+                'File Path': folder,
+                'File Name': fex_name,
+                'Mapping Type': item['mapping_type'],
+                'From Table': item['from_table'],
+                'From Key': item['from_key'],
+                'To Table': item['to_table'],
+                'To Key': item['to_key'],
+                'WebFOCUS Join Mode': item['join_type'],
+                'Output HOLD': item['output_hold'],
+                'Raw WebFOCUS Statement': item['raw_statement'],
+                'Suggested Pyramid Action': item.get('suggested_pyramid_expression_action', ''),
+                'Needs Manual Review': item.get('needs_manual_review', ''),
+                'Review Reason': item.get('review_reason', ''),
+                'Confidence': item.get('confidence', ''),
+            })
+        return pd.DataFrame(rows)
+
+    elif table_type == 'sources':
+        rows = []
+        for item in parsed.get('source_inventory', []):
+            row = {'File Path': folder, 'File Name': fex_name}
+            row.update(item)
+            rows.append(row)
+        return pd.DataFrame(rows)
+
+    elif table_type == 'lineage':
+        rows = []
+        for item in parsed.get('hold_lineage', []):
+            row = {'File Path': folder, 'File Name': fex_name}
+            row.update(item)
+            rows.append(row)
+        return pd.DataFrame(rows)
+
+    elif table_type == 'mapping_tables':
+        rows = []
+        for item in parsed.get('mapping_table_preview', []):
+            row = {'File Path': folder, 'File Name': fex_name}
+            row.update(item)
+            rows.append(row)
+        return pd.DataFrame(rows)
+
+    elif table_type == 'final_dataset':
+        rows = []
+        for item in parsed.get('final_dataset_plan', []):
+            row = {'File Path': folder, 'File Name': fex_name}
+            row.update(item)
+            rows.append(row)
+        return pd.DataFrame(rows)
+
+    elif table_type == 'build_plan':
+        rows = []
+        for item in parsed.get('pyramid_build_plan', []):
+            row = {'File Path': folder, 'File Name': fex_name}
+            row.update(item)
+            rows.append(row)
+        return pd.DataFrame(rows)
+
+    elif table_type == 'drilldowns':
+        rows = []
+        for item in parsed.get('drilldowns', []):
+            row = {'File Path': folder, 'File Name': fex_name}
+            row.update(item)
+            rows.append(row)
+        return pd.DataFrame(rows)
+
+    elif table_type == 'modeler_plan':
+        rows = []
+        for item in parsed.get('pyramid_modeler_plan', []):
+            row = {'File Path': folder, 'File Name': fex_name}
+            row.update(item)
+            rows.append(row)
+        return pd.DataFrame(rows)
+
+    return pd.DataFrame()
+
+
+def filter_report_df(df, fex_name, file_path, parsed=None, table_type=None):
+    if df is not None and not df.empty:
+        name_col = 'File Name' if 'File Name' in df.columns else 'FEX Name'
+        if name_col in df.columns and 'File Path' in df.columns:
+            subset = df[(df[name_col] == fex_name) & (df['File Path'] == file_path)]
+            if not subset.empty:
+                return subset
+
+    if parsed is not None and table_type is not None:
+        return build_report_single_table(parsed, file_path, fex_name, table_type)
+
+    return pd.DataFrame()
 
 
 def filter_validation_df(df, fex_name):
@@ -6952,7 +7088,7 @@ def render_structured_modeler_flow(modeler_plan_df, generic_logic=None):
     categories = ['All'] + sorted(modeler_plan_df['category'].dropna().unique().tolist())
     review_levels = ['All'] + sorted(modeler_plan_df['review_level'].dropna().unique().tolist())
 
-    file_tag = str(modeler_plan_df.iloc[0].get('File Name', 'report'))
+    file_tag = re.sub(r'[^A-Za-z0-9_]+', '_', str(modeler_plan_df.iloc[0].get('File Name', 'report')))
     with fc1:
         sel_cat = st.selectbox("Filter by Category", categories, key=f"mod_cat_{file_tag}")
     with fc2:
@@ -7062,12 +7198,29 @@ def render_semantic_model_inspector(semantic_model, generic_logic=None):
     with st.expander("🔍 View Full Semantic Model (JSON)", expanded=False):
         st.json(semantic_model)
 
-
 def render_pyramid_build_plan(report_row, source_df, lineage_df, join_df, filter_df, formula_df, mapping_df, final_df, field_df, drilldown_df=None, modeler_plan_df=None, generic_logic=None):
-    st.info("The full evidence workbook is available from the Download Full Excel Report button.")
-    tabs = st.tabs([
+    pyramid_subtab_labels = [
         "Structured Modeler Flow", "Pyramid Semantic Model", "AI Build Plan", "SQL View", "Pyramid Data Flow / Data Model", "Data Model & Calculated Fields", "Visuals", "Validation",
-    ])
+    ]
+    report_tag = re.sub(r'[^A-Za-z0-9_]+', '_', str(report_row.get('FEX Name', '')) + '_' + str(report_row.get('File Path', '')))
+    inner_active_key = "active_pyramid_build_plan_subtab"
+    inner_widget_key = f"pyramid_build_plan_subtabs_{report_tag}"
+
+    if inner_active_key not in st.session_state or st.session_state[inner_active_key] not in pyramid_subtab_labels:
+        st.session_state[inner_active_key] = pyramid_subtab_labels[0]
+
+    if inner_widget_key in st.session_state and st.session_state[inner_widget_key] in pyramid_subtab_labels:
+        st.session_state[inner_active_key] = st.session_state[inner_widget_key]
+
+    def on_inner_subtab_change():
+        st.session_state[inner_active_key] = st.session_state[inner_widget_key]
+
+    tabs = st.tabs(
+        pyramid_subtab_labels,
+        default=st.session_state[inner_active_key],
+        key=inner_widget_key,
+        on_change=on_inner_subtab_change,
+    )
     with tabs[0]:
         render_structured_modeler_flow(modeler_plan_df, generic_logic)
     with tabs[1]:
@@ -7088,6 +7241,529 @@ def render_pyramid_build_plan(report_row, source_df, lineage_df, join_df, filter
 
 def render_output_drilldowns_combined(report_row, final_df, drilldown_df, lineage_df):
     render_drilldown_output_inspector(report_row, final_df, drilldown_df, lineage_df)
+
+
+def render_technical_architecture_flow(analysis_result=None):
+    """
+    Renders the developer-focused Technical Migration Architecture and Traceability Pipeline.
+    Displays the 7 sequential deterministic stages:
+      1. WebFOCUS FEX (Source Ingest)
+      2. Business Logic Extraction (AST Parser)
+      3. Generic Migration Representation (Canonical Schema)
+      4. Pyramid Target Mapping (Concept Translation Layer)
+      5. Structured Modeler Flow (Triage & Classification)
+      6. Pyramid Implementation (Target Stack Artifacts)
+      7. Validation (Migration QA & Verification)
+    Also renders an expandable Traceability Matrix with concrete transformation chains.
+    """
+    total_reports = 0
+    unique_reports = 0
+    total_tables = 0
+    if analysis_result and isinstance(analysis_result, dict):
+        display_tables = analysis_result.get("display_tables", {})
+        overview_df = display_tables.get("overview") if isinstance(display_tables, dict) else None
+        total_reports = len(overview_df) if overview_df is not None else 0
+        unique_reports = analysis_result.get("unique_count", 0)
+        total_tables = analysis_result.get("total_tables", 0)
+
+    stats_badges = ""
+    if total_reports > 0:
+        stats_badges = f"""
+        <span class="tech-meta-badge" title="Total analyzed WebFOCUS FEX reports">📊 {total_reports} Reports Ingested</span>
+        <span class="tech-meta-badge" title="Deduplicated report archetypes">🧩 {unique_reports} Unique Archetypes</span>
+        <span class="tech-meta-badge" title="Unique physical source tables identified">🗄️ {total_tables} Source Tables</span>
+        """
+    else:
+        stats_badges = """
+        <span class="tech-meta-badge">📊 Pipeline Active</span>
+        <span class="tech-meta-badge">🧩 Deterministic AST</span>
+        <span class="tech-meta-badge">🗄️ Automated Mappings</span>
+        """
+
+    flow_html = f"""
+<style>
+.tech-arch-wrapper {{
+    background: var(--kash-section, rgba(127, 127, 127, 0.05));
+    border: 1px solid var(--kash-border, rgba(127, 127, 127, 0.2));
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-top: 6px;
+    margin-bottom: 22px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+}}
+.tech-arch-header {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--kash-border, rgba(127, 127, 127, 0.15));
+}}
+.tech-arch-title-area h3 {{
+    margin: 0 0 4px 0;
+    font-size: 1.12rem;
+    font-weight: 700;
+    color: var(--kash-deep, var(--text-color, #FFFFFF));
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: -0.01em;
+}}
+.tech-arch-subtitle {{
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--kash-muted, #94A3B8);
+}}
+.tech-arch-meta-badges {{
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}}
+.tech-meta-badge {{
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    background: rgba(127, 127, 127, 0.08);
+    color: var(--kash-navy, var(--text-color, #E2E8F0));
+    border: 1px solid var(--kash-border, rgba(127, 127, 127, 0.2));
+}}
+.tech-arch-grid {{
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 10px;
+    margin-bottom: 8px;
+}}
+@media (max-width: 1350px) {{
+    .tech-arch-grid {{
+        grid-template-columns: repeat(4, 1fr);
+    }}
+}}
+@media (max-width: 820px) {{
+    .tech-arch-grid {{
+        grid-template-columns: repeat(2, 1fr);
+    }}
+}}
+@media (max-width: 500px) {{
+    .tech-arch-grid {{
+        grid-template-columns: 1fr;
+    }}
+}}
+.tech-arch-card {{
+    background: var(--kash-card, var(--background-color, #111827));
+    border: 1px solid var(--kash-border, rgba(127, 127, 127, 0.2));
+    border-radius: 8px;
+    padding: 12px 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    position: relative;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}}
+.tech-arch-card:hover {{
+    border-color: #FF5A1F;
+    box-shadow: 0 4px 14px rgba(255, 90, 31, 0.12);
+}}
+.tech-arch-card-top {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}}
+.tech-arch-step-num {{
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #FF5A1F;
+}}
+.tech-arch-badge {{
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}}
+.badge-source {{ background: rgba(59, 130, 246, 0.15); color: #60A5FA; border: 1px solid rgba(59, 130, 246, 0.3); }}
+.badge-extract {{ background: rgba(245, 158, 11, 0.15); color: #FBBF24; border: 1px solid rgba(245, 158, 11, 0.3); }}
+.badge-generic {{ background: rgba(168, 85, 247, 0.15); color: #C084FC; border: 1px solid rgba(168, 85, 247, 0.3); }}
+.badge-target {{ background: rgba(14, 165, 233, 0.15); color: #38BDF8; border: 1px solid rgba(14, 165, 233, 0.3); }}
+.badge-triage {{ background: rgba(234, 88, 12, 0.15); color: #FB923C; border: 1px solid rgba(234, 88, 12, 0.3); }}
+.badge-impl {{ background: rgba(34, 197, 94, 0.15); color: #4ADE80; border: 1px solid rgba(34, 197, 94, 0.3); }}
+.badge-qa {{ background: rgba(99, 102, 241, 0.15); color: #818CF8; border: 1px solid rgba(99, 102, 241, 0.3); }}
+
+.tech-arch-card-title {{
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--kash-deep, var(--text-color, #FFFFFF));
+    margin-bottom: 7px;
+    line-height: 1.25;
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+}}
+.tech-arch-item-list {{
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 0.72rem;
+    color: var(--kash-navy, var(--text-color, #CBD5E1));
+    line-height: 1.4;
+}}
+.tech-arch-item-list li {{
+    padding: 2.5px 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 5px;
+    border-bottom: 1px dashed var(--kash-border, rgba(127, 127, 127, 0.1));
+}}
+.tech-arch-item-list li:last-child {{
+    border-bottom: none;
+}}
+.tech-bullet {{
+    color: #FF5A1F;
+    font-weight: bold;
+    font-size: 0.75rem;
+    line-height: 1.2;
+}}
+.triage-pills {{
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 4px;
+    width: 100%;
+}}
+.triage-pill {{
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.66rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-weight: 600;
+}}
+.triage-auto {{ background: rgba(34, 197, 94, 0.15); color: #4ADE80; border: 1px solid rgba(34, 197, 94, 0.3); }}
+.triage-rec {{ background: rgba(245, 158, 11, 0.15); color: #FBBF24; border: 1px solid rgba(245, 158, 11, 0.3); }}
+.triage-man {{ background: rgba(239, 68, 68, 0.15); color: #F87171; border: 1px solid rgba(239, 68, 68, 0.3); }}
+
+.trace-table-container {{
+    overflow-x: auto;
+    margin-top: 10px;
+    border: 1px solid var(--kash-border, rgba(127, 127, 127, 0.2));
+    border-radius: 8px;
+}}
+.trace-table {{
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+    text-align: left;
+}}
+.trace-table th {{
+    background: rgba(127, 127, 127, 0.1);
+    padding: 8px 12px;
+    font-weight: 700;
+    color: var(--kash-deep, var(--text-color, #FFFFFF));
+    border-bottom: 2px solid #FF5A1F;
+    white-space: nowrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}}
+.trace-table td {{
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--kash-border, rgba(127, 127, 127, 0.12));
+    vertical-align: top;
+    color: var(--kash-navy, var(--text-color, #CBD5E1));
+}}
+.trace-table tr:hover td {{
+    background: rgba(127, 127, 127, 0.05);
+}}
+.trace-code {{
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.72rem;
+    color: #FF5A1F;
+    background: rgba(255, 90, 31, 0.08);
+    padding: 1px 5px;
+    border-radius: 3px;
+    border: 1px solid rgba(255, 90, 31, 0.2);
+    font-weight: 600;
+}}
+.trace-target {{
+    font-weight: 600;
+    color: var(--kash-deep, var(--text-color, #FFFFFF));
+}}
+</style>
+
+<div class="tech-arch-wrapper">
+    <div class="tech-arch-header">
+        <div class="tech-arch-title-area">
+            <h3>⚡ Technical Migration Architecture &amp; Traceability Pipeline</h3>
+            <p class="tech-arch-subtitle">Deterministic transformation lineage: WebFOCUS 4GL AST &rarr; Generic Migration Representation &rarr; Pyramid Analytics Target Stack</p>
+        </div>
+        <div class="tech-arch-meta-badges">
+            <span class="tech-meta-badge">📐 7 Canonical Stages</span>
+            <span class="tech-meta-badge">🎯 3-Tier Modeler Triage</span>
+            {stats_badges}
+        </div>
+    </div>
+
+    <!-- 7-Stage Architecture Flow Grid -->
+    <div class="tech-arch-grid">
+        <!-- Stage 1 -->
+        <div class="tech-arch-card">
+            <div class="tech-arch-card-top">
+                <span class="tech-arch-step-num">STAGE 01 &rarr;</span>
+                <span class="tech-arch-badge badge-source">INGEST</span>
+            </div>
+            <div class="tech-arch-card-title">WebFOCUS FEX</div>
+            <ul class="tech-arch-item-list">
+                <li><span class="tech-bullet">&bull;</span> Sources &amp; Master (.mas)</li>
+                <li><span class="tech-bullet">&bull;</span> TABLE FILE &amp; Verbs</li>
+                <li><span class="tech-bullet">&bull;</span> JOIN &amp; MATCH FILE</li>
+                <li><span class="tech-bullet">&bull;</span> WHERE / IF &amp; &amp;VAR</li>
+                <li><span class="tech-bullet">&bull;</span> DEFINE (Row formulas)</li>
+                <li><span class="tech-bullet">&bull;</span> COMPUTE (Aggregates)</li>
+                <li><span class="tech-bullet">&bull;</span> DECODE &amp; EDIT Lookups</li>
+                <li><span class="tech-bullet">&bull;</span> HOLD / PCHOLD Staging</li>
+            </ul>
+        </div>
+
+        <!-- Stage 2 -->
+        <div class="tech-arch-card">
+            <div class="tech-arch-card-top">
+                <span class="tech-arch-step-num">STAGE 02 &rarr;</span>
+                <span class="tech-arch-badge badge-extract">PARSER AST</span>
+            </div>
+            <div class="tech-arch-card-title">Business Logic Extraction</div>
+            <ul class="tech-arch-item-list">
+                <li><span class="tech-bullet">&bull;</span> Sources (Tables/Views)</li>
+                <li><span class="tech-bullet">&bull;</span> JOIN / MATCH (Keys/Types)</li>
+                <li><span class="tech-bullet">&bull;</span> Filters / Parameters</li>
+                <li><span class="tech-bullet">&bull;</span> DEFINE / COMPUTE</li>
+                <li><span class="tech-bullet">&bull;</span> DECODE (Value dicts)</li>
+                <li><span class="tech-bullet">&bull;</span> Aggregations (SUM, AVE)</li>
+                <li><span class="tech-bullet">&bull;</span> Groupings (BY / ACROSS)</li>
+                <li><span class="tech-bullet">&bull;</span> HOLD / Outputs (Staging)</li>
+            </ul>
+        </div>
+
+        <!-- Stage 3 -->
+        <div class="tech-arch-card">
+            <div class="tech-arch-card-top">
+                <span class="tech-arch-step-num">STAGE 03 &rarr;</span>
+                <span class="tech-arch-badge badge-generic">CANONICAL</span>
+            </div>
+            <div class="tech-arch-card-title">Generic Migration Representation</div>
+            <ul class="tech-arch-item-list">
+                <li><span class="tech-bullet">&bull;</span> Sources (Entities/Types)</li>
+                <li><span class="tech-bullet">&bull;</span> Joins (Unified Graph)</li>
+                <li><span class="tech-bullet">&bull;</span> Filters (Normalized AST)</li>
+                <li><span class="tech-bullet">&bull;</span> Calculations (Agnostic)</li>
+                <li><span class="tech-bullet">&bull;</span> Mappings (Lookup maps)</li>
+                <li><span class="tech-bullet">&bull;</span> Aggregations (Metrics)</li>
+                <li><span class="tech-bullet">&bull;</span> Groupings (Dimensions)</li>
+                <li><span class="tech-bullet">&bull;</span> Parameters (Variables)</li>
+                <li><span class="tech-bullet">&bull;</span> Outputs (Projections)</li>
+            </ul>
+        </div>
+
+        <!-- Stage 4 -->
+        <div class="tech-arch-card">
+            <div class="tech-arch-card-top">
+                <span class="tech-arch-step-num">STAGE 04 &rarr;</span>
+                <span class="tech-arch-badge badge-target">MAPPING</span>
+            </div>
+            <div class="tech-arch-card-title">Pyramid Target Mapping</div>
+            <ul class="tech-arch-item-list">
+                <li><span class="tech-bullet">&bull;</span> Data Source / Model Table</li>
+                <li><span class="tech-bullet">&bull;</span> Data Flow (ETL/Joins/HOLD)</li>
+                <li><span class="tech-bullet">&bull;</span> Semantic Model Schema</li>
+                <li><span class="tech-bullet">&bull;</span> Relationships (1:1, 1:N)</li>
+                <li><span class="tech-bullet">&bull;</span> Calculated Columns</li>
+                <li><span class="tech-bullet">&bull;</span> Formulate / PQL Logic</li>
+                <li><span class="tech-bullet">&bull;</span> Parameters (Model/Slicer)</li>
+                <li><span class="tech-bullet">&bull;</span> Discover / Visuals</li>
+            </ul>
+        </div>
+
+        <!-- Stage 5 -->
+        <div class="tech-arch-card">
+            <div class="tech-arch-card-top">
+                <span class="tech-arch-step-num">STAGE 05 &rarr;</span>
+                <span class="tech-arch-badge badge-triage">TRIAGE</span>
+            </div>
+            <div class="tech-arch-card-title">Structured Modeler Flow</div>
+            <ul class="tech-arch-item-list">
+                <li style="border:none; padding: 2px 0;">
+                    <div class="triage-pills">
+                        <span class="triage-pill triage-auto"><span>&#9679; Automatic</span><span>95%+</span></span>
+                        <span class="triage-pill triage-rec"><span>&#9679; Recommended</span><span>80-90%</span></span>
+                        <span class="triage-pill triage-man"><span>&#9679; Manual Review</span><span>&lt;80%</span></span>
+                    </div>
+                </li>
+                <li><span class="tech-bullet">&bull;</span> Confidence Scoring</li>
+                <li><span class="tech-bullet">&bull;</span> Decision Rationales</li>
+                <li><span class="tech-bullet">&bull;</span> Modeler Build Queue</li>
+            </ul>
+        </div>
+
+        <!-- Stage 6 -->
+        <div class="tech-arch-card">
+            <div class="tech-arch-card-top">
+                <span class="tech-arch-step-num">STAGE 06 &rarr;</span>
+                <span class="tech-arch-badge badge-impl">TARGET ASSETS</span>
+            </div>
+            <div class="tech-arch-card-title">Pyramid Implementation</div>
+            <ul class="tech-arch-item-list">
+                <li><span class="tech-bullet">&bull;</span> Semantic Model (Schema)</li>
+                <li><span class="tech-bullet">&bull;</span> Data Flow (ETL Nodes)</li>
+                <li><span class="tech-bullet">&bull;</span> Calculated Fields (PQL)</li>
+                <li><span class="tech-bullet">&bull;</span> Visuals (Discover Grids)</li>
+                <li><span class="tech-bullet">&bull;</span> Validation (Verification)</li>
+                <li><span class="tech-bullet">&bull;</span> JSON Model Export</li>
+            </ul>
+        </div>
+
+        <!-- Stage 7 -->
+        <div class="tech-arch-card">
+            <div class="tech-arch-card-top">
+                <span class="tech-arch-step-num">STAGE 07</span>
+                <span class="tech-arch-badge badge-qa">QA VERIFY</span>
+            </div>
+            <div class="tech-arch-card-title">Validation</div>
+            <ul class="tech-arch-item-list">
+                <li><span class="tech-bullet">&bull;</span> SQL / Data Validation</li>
+                <li><span class="tech-bullet">&bull;</span> Business Total Validation</li>
+                <li><span class="tech-bullet">&bull;</span> Report Logic Validation</li>
+                <li><span class="tech-bullet">&bull;</span> Interaction Validation</li>
+                <li><span class="tech-bullet">&bull;</span> 16-Point QA Checklist</li>
+                <li><span class="tech-bullet">&bull;</span> Audit Sign-off Ready</li>
+            </ul>
+        </div>
+    </div>
+</div>
+"""
+    st.markdown(flow_html, unsafe_allow_html=True)
+
+    with st.expander("🔬 Traceability Matrix: Concrete Transformation Lineage (WebFOCUS → Generic AST → Pyramid Target)", expanded=False):
+        st.caption("Detailed transformation trace mapping specific WebFOCUS 4GL constructs to their extracted representation, canonical AST, Pyramid mapping, review classification, and final target artifact.")
+        
+        traceability_rows = [
+            {
+                "construct": "JOIN",
+                "example": "JOIN SALES.CUST_ID IN SALES TO CUSTOMER.ID IN CUSTOMER AS J1",
+                "extracted": "SALES &rarr; CUSTOMER relationship (inner equi-join on CUST_ID = ID)",
+                "generic": "Generic relationship (Foreign Key Link, Many-to-One)",
+                "mapping": "Pyramid Semantic Model Relationship",
+                "triage_class": "triage-rec",
+                "triage_text": "Recommended (90%)",
+                "target": "Semantic Model (Modeler Canvas)"
+            },
+            {
+                "construct": "JOIN + HOLD",
+                "example": "JOIN ... + ON TABLE HOLD AS STG_DATA FORMAT BINARY",
+                "extracted": "Physical intermediate dataset & ETL staging transformation",
+                "generic": "Generic join & staging output representation",
+                "mapping": "Pyramid Data Flow Join & Table Node",
+                "triage_class": "triage-rec",
+                "triage_text": "Recommended (85%)",
+                "target": "Data Flow (Prepare Pipeline)"
+            },
+            {
+                "construct": "DECODE",
+                "example": "DECODE REGION ('N' 'North' 'S' 'South' 'E' 'East' 'W' 'West' ELSE 'Other')",
+                "extracted": "REGION inline conditional lookup dictionary mapping",
+                "generic": "Mapping representation (Key-Value lookup dictionary)",
+                "mapping": "PQL Case statement / Lookup Table",
+                "triage_class": "triage-rec",
+                "triage_text": "Recommended (80%)",
+                "target": "Calculated Field / Lookup (Formulate)"
+            },
+            {
+                "construct": "DEFINE",
+                "example": "DEFINE FILE SALES PROFIT/D12.2 = REVENUE - COST; END",
+                "extracted": "Row-level scalar arithmetic expression across columns",
+                "generic": "Generic calculation AST (Scalar formula tree)",
+                "mapping": "Model Table Calculated Column (SQL / PQL)",
+                "triage_class": "triage-auto",
+                "triage_text": "Automatic (95%)",
+                "target": "Semantic Model (Modeler)"
+            },
+            {
+                "construct": "COMPUTE",
+                "example": "COMPUTE MARGIN_PCT/D6.2% = (PROFIT / REVENUE) * 100;",
+                "extracted": "Post-aggregation calculation evaluated at visual display grain",
+                "generic": "Generic metric calculation AST (Aggregate measure formula)",
+                "mapping": "Pyramid Analytical Custom Measure (PQL)",
+                "triage_class": "triage-auto",
+                "triage_text": "Automatic (95%)",
+                "target": "Semantic Model / Formulate"
+            },
+            {
+                "construct": "WHERE &VAR",
+                "example": "WHERE ORDER_DATE GE '&START_DATE' AND REGION EQ '&SEL_REGION'",
+                "extracted": "Dynamic prompt filters with runtime amper-variable bindings",
+                "generic": "Generic parameter definitions + AST condition predicates",
+                "mapping": "Pyramid Model Parameter & Slicer Variable",
+                "triage_class": "triage-auto",
+                "triage_text": "Automatic (95%)",
+                "target": "Modeler Parameter / Discover Slicer"
+            },
+            {
+                "construct": "MATCH FILE",
+                "example": "MATCH FILE SALES ... RUN FILE ORDERS ... AFTER MATCH OLD-OR-NEW",
+                "extracted": "Multi-stream merge join with outer-join / match-merge semantics",
+                "generic": "Canonical multi-source merge operation AST",
+                "mapping": "Pyramid Data Flow Outer Join / Merge Node",
+                "triage_class": "triage-man",
+                "triage_text": "Manual Review (70%)",
+                "target": "Data Flow (ETL Merge Step)"
+            }
+        ]
+
+        table_rows_html = []
+        for r in traceability_rows:
+            table_rows_html.append(f"""
+            <tr>
+                <td>
+                    <span class="trace-code">{r['construct']}</span>
+                    <div style="font-size: 0.68rem; color: var(--kash-muted, #94A3B8); margin-top: 3px; font-family: monospace;">{r['example']}</div>
+                </td>
+                <td>{r['extracted']}</td>
+                <td><code>{r['generic']}</code></td>
+                <td><strong>{r['mapping']}</strong></td>
+                <td><span class="triage-pill {r['triage_class']}">{r['triage_text']}</span></td>
+                <td><span class="trace-target">{r['target']}</span></td>
+            </tr>
+            """)
+
+        table_html = f"""
+        <div class="trace-table-container">
+            <table class="trace-table">
+                <thead>
+                    <tr>
+                        <th style="width: 22%;">WebFOCUS Construct</th>
+                        <th style="width: 18%;">Extracted Logic</th>
+                        <th style="width: 18%;">Generic Representation</th>
+                        <th style="width: 16%;">Pyramid Mapping</th>
+                        <th style="width: 12%;">Review Level</th>
+                        <th style="width: 14%;">Final Pyramid Asset</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {''.join(table_rows_html)}
+                </tbody>
+            </table>
+        </div>
+        """
+        st.markdown(table_html, unsafe_allow_html=True)
 
 
 if submit:
@@ -7230,6 +7906,8 @@ if analysis_result:
 
         show_download_button(output_stream, fn, "download_top")
 
+        render_technical_architecture_flow(analysis_result)
+
         st.markdown('<div class="section-label">Choose a WebFOCUS report to inspect</div>', unsafe_allow_html=True)
         if overview_df.empty:
             st.info("No report rows were available to inspect.")
@@ -7273,12 +7951,20 @@ if analysis_result:
             filtered_df = sort_overview_df(filtered_df, sort_choice)
 
             report_options = [
-                f"{row['FEX Name']} | {row['File Path']} | {row['Duplicate Type']}"
-                for _, row in filtered_df.iterrows()
+                f"{name} | {path} | {dup}"
+                for name, path, dup in zip(
+                    filtered_df['FEX Name'],
+                    filtered_df['File Path'],
+                    filtered_df['Duplicate Type']
+                )
             ]
 
             if total_reports >= 20:
-                st.caption(f"Showing {len(report_options)} of {total_reports} reports")
+                if len(report_options) > 500 and not search_term.strip():
+                    st.caption(f"Showing first 500 of {total_reports} reports. Use the search box above to quickly find any report by name.")
+                    report_options = report_options[:500]
+                else:
+                    st.caption(f"Showing {len(report_options)} of {total_reports} reports")
 
             selected_option = st.selectbox(
                 "Choose a report to inspect",
@@ -7295,20 +7981,21 @@ if analysis_result:
 
             if not selected_overview.empty:
                 report_row = selected_overview.iloc[0]
-                source_df = filter_report_df(display_tables['sources'], selected_name, selected_path)
-                lineage_df = filter_report_df(display_tables['lineage'], selected_name, selected_path)
-                build_plan_df = filter_report_df(display_tables['build_plan'], selected_name, selected_path)
-                mapping_df = filter_report_df(display_tables['mapping_tables'], selected_name, selected_path)
-                final_df = filter_report_df(display_tables['final_dataset'], selected_name, selected_path)
-                field_df = filter_report_df(display_tables['fields'], selected_name, selected_path)
-                formula_df = filter_report_df(display_tables['formulas'], selected_name, selected_path)
-                filter_df = filter_report_df(display_tables['filters'], selected_name, selected_path)
-                join_df = filter_report_df(display_tables['joins'], selected_name, selected_path)
-                duplicate_df = filter_report_df(display_tables['duplicates'], selected_name, selected_path)
-                drilldown_df = filter_report_df(display_tables['drilldowns'], selected_name, selected_path)
-                modeler_plan_df = filter_report_df(display_tables.get('modeler_plan', pd.DataFrame()), selected_name, selected_path)
                 parsed_for_report = display_tables.get('parsed_results_map', {}).get((selected_path, selected_name))
                 generic_logic = parsed_for_report.get('migration_logic') if parsed_for_report else None
+
+                source_df = filter_report_df(display_tables['sources'], selected_name, selected_path, parsed_for_report, 'sources')
+                lineage_df = filter_report_df(display_tables['lineage'], selected_name, selected_path, parsed_for_report, 'lineage')
+                build_plan_df = filter_report_df(display_tables['build_plan'], selected_name, selected_path, parsed_for_report, 'build_plan')
+                mapping_df = filter_report_df(display_tables['mapping_tables'], selected_name, selected_path, parsed_for_report, 'mapping_tables')
+                final_df = filter_report_df(display_tables['final_dataset'], selected_name, selected_path, parsed_for_report, 'final_dataset')
+                field_df = filter_report_df(display_tables['fields'], selected_name, selected_path, parsed_for_report, 'fields')
+                formula_df = filter_report_df(display_tables['formulas'], selected_name, selected_path, parsed_for_report, 'formulas')
+                filter_df = filter_report_df(display_tables['filters'], selected_name, selected_path, parsed_for_report, 'filters')
+                join_df = filter_report_df(display_tables['joins'], selected_name, selected_path, parsed_for_report, 'joins')
+                duplicate_df = filter_report_df(display_tables['duplicates'], selected_name, selected_path)
+                drilldown_df = filter_report_df(display_tables['drilldowns'], selected_name, selected_path, parsed_for_report, 'drilldowns')
+                modeler_plan_df = filter_report_df(display_tables.get('modeler_plan', pd.DataFrame()), selected_name, selected_path, parsed_for_report, 'modeler_plan')
 
                 st.subheader(f"Report Inspector: {selected_name}")
 
@@ -7389,6 +8076,7 @@ if analysis_result:
                 )
                 report_download_key = re.sub(r'[^A-Za-z0-9_]+', '_', f"{selected_name}_{selected_path}")
                 report_file_name = re.sub(r'[^A-Za-z0-9_.-]+', '_', Path(str(selected_name)).stem) + "_report.xlsx"
+                st.info("The full evidence workbook is available from the Download Full Excel Report button.")
                 st.download_button(
                     "Download This Report (Excel)",
                     data=single_report_excel,
@@ -7398,7 +8086,7 @@ if analysis_result:
                     use_container_width=True,
                 )
 
-                report_tabs = st.tabs([
+                report_tab_labels = [
                     "Start Here",
                     "Sources & HOLD",
                     "Joins, Filters & Parameters",
@@ -7406,7 +8094,29 @@ if analysis_result:
                     "Output & Drilldowns",
                     "Pyramid Build Plan",
                     "Table → Database Mapping",
-                ])
+                ]
+
+                active_report_tab_key = "active_report_tab"
+                widget_report_tab_key = f"report_tabs_{report_download_key}"
+
+                if active_report_tab_key not in st.session_state:
+                    st.session_state[active_report_tab_key] = "Start Here"
+
+                if widget_report_tab_key in st.session_state and st.session_state[widget_report_tab_key] in report_tab_labels:
+                    st.session_state[active_report_tab_key] = st.session_state[widget_report_tab_key]
+
+                if st.session_state[active_report_tab_key] not in report_tab_labels:
+                    st.session_state[active_report_tab_key] = "Start Here"
+
+                def on_report_tab_change():
+                    st.session_state[active_report_tab_key] = st.session_state[widget_report_tab_key]
+
+                report_tabs = st.tabs(
+                    report_tab_labels,
+                    default=st.session_state[active_report_tab_key],
+                    key=widget_report_tab_key,
+                    on_change=on_report_tab_change,
+                )
 
                 with report_tabs[0]:
                     render_start_here(report_row, source_df, lineage_df, join_df, final_df)

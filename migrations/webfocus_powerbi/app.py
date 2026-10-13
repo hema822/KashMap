@@ -3715,7 +3715,10 @@ def build_output_workbook(fex_items, allowed_program_names, matched_pairs, llm_o
     )
 
 
-st.set_page_config(page_title="KashMap Migration Workspace", layout="wide")
+try:
+    st.set_page_config(page_title="KashMap Migration Workspace", layout="wide")
+except Exception:
+    pass
 
 st.markdown(
     """
@@ -4193,6 +4196,13 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+col_info, col_btn = st.columns([0.76, 0.24])
+with col_info:
+    st.info("ℹ️ **WebFOCUS → Power BI Migration**: Upload WebFOCUS procedure files (`.fex`) or ZIP folder. To migrate IBM Cognos XML reports, use the Cognos → Power BI workflow.")
+with col_btn:
+    if st.button("Switch to Cognos → Power BI ➡️", key="wf_to_cg_switch", use_container_width=True):
+        st.switch_page("pages/cognos_powerbi.py")
+
 with st.expander("How to use KashMap", expanded=True):
     st.markdown(
         """
@@ -4247,7 +4257,36 @@ with upload_col:
             )
             uploaded_zip = None
 
+            sample_col1, sample_col2 = st.columns([0.65, 0.35])
+            with sample_col1:
+                if st.button("Load Built-in Sample FEX Report", key="load_sample_fex_btn", help="Load sample WebFOCUS procedure .fex"):
+                    sample_path = Path(__file__).resolve().parent.parent.parent / "test_reports" / "webfocus" / "sample_sales_report.fex"
+                    if sample_path.exists():
+                        st.session_state["fex_sample_loaded"] = sample_path.read_text(encoding="utf-8")
+                        st.session_state["fex_sample_name"] = "sample_sales_report.fex"
+                        st.success("Loaded sample FEX: 'sample_sales_report.fex'. Click 'Analyze Files' to run.")
+            with sample_col2:
+                if st.session_state.get("fex_sample_loaded"):
+                    if st.button("Clear Sample", key="clear_sample_fex_btn"):
+                        st.session_state.pop("fex_sample_loaded", None)
+                        st.session_state.pop("fex_sample_name", None)
+                        st.rerun()
+
+            if st.session_state.get("fex_sample_loaded") and not uploaded_fex_files:
+                st.info(f"Sample loaded: **{st.session_state.get('fex_sample_name')}**")
+
             if uploaded_fex_files:
+                xml_detected = [f.name for f in uploaded_fex_files if f.name.lower().endswith(".xml")]
+                if xml_detected:
+                    st.error(
+                        f"❌ Cognos XML file detected: {', '.join(xml_detected)}. "
+                        "The WebFOCUS uploader accepts ONLY WebFOCUS procedure files (.fex). "
+                        "Please use the Cognos → Power BI workflow to analyze .xml files."
+                    )
+                    if st.button("Switch to Cognos → Power BI", key="xml_err_redirect", type="primary"):
+                        st.switch_page("pages/cognos_powerbi.py")
+                    st.stop()
+
                 total_size = sum(getattr(file, "size", 0) for file in uploaded_fex_files)
 
                 st.markdown(
@@ -6100,14 +6139,28 @@ if submit:
     st.session_state.pop("report_explorer_choice", None)
     try:
         if mode == "Multiple FEX Files":
-            if not uploaded_fex_files:
-                st.error("Please upload at least one .fex file.")
+            if uploaded_fex_files:
+                xml_detected = [f.name for f in uploaded_fex_files if f.name.lower().endswith(".xml")]
+                if xml_detected:
+                    st.error(
+                        f"❌ Cognos XML file detected: {', '.join(xml_detected)}. "
+                        "The WebFOCUS uploader accepts ONLY WebFOCUS procedure files (.fex). "
+                        "Please use the Cognos → Power BI workflow to analyze .xml files."
+                    )
+                    if st.button("Switch to Cognos → Power BI", key="xml_err_redirect_submit", type="primary"):
+                        st.switch_page("pages/cognos_powerbi.py")
+                    st.stop()
+                all_fex_items = [
+                    ("uploaded_files", f.name, read_uploaded_fex(f))
+                    for f in uploaded_fex_files
+                ]
+            elif st.session_state.get("fex_sample_loaded"):
+                all_fex_items = [
+                    ("sample_dataset", st.session_state.get("fex_sample_name", "sample_sales_report.fex"), st.session_state["fex_sample_loaded"])
+                ]
+            else:
+                st.error("Please upload at least one .fex file or load the built-in sample.")
                 st.stop()
-
-            all_fex_items = [
-                ("uploaded_files", f.name, read_uploaded_fex(f))
-                for f in uploaded_fex_files
-            ]
         else:
             if not uploaded_zip:
                 st.error("Please upload a ZIP file.")
